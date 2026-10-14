@@ -72,9 +72,6 @@ export function useVisibleSidebarWorktrees(args: {
   const browserTabsByWorktree = useAppStore((s) =>
     !showSleepingWorkspaces ? getVisibleWorktreeBrowserActivityTabs(s.browserTabsByWorktree) : null
   )
-  const unifiedTabsByWorktree = useAppStore((s) =>
-    !showSleepingWorkspaces ? s.unifiedTabsByWorktree : null
-  )
   const worktreeIdsWithStructuredChat = useAppStore((s) =>
     getStructuredChatWorktreeIds(showSleepingWorkspaces, s.unifiedTabsByWorktree)
   )
@@ -89,16 +86,9 @@ export function useVisibleSidebarWorktrees(args: {
       : getWorktreeIdsWithLiveAgent(
           useAppStore.getState().agentStatusByPaneKey,
           tabsByWorktree,
-          agentStatusNow,
-          unifiedTabsByWorktree
+          agentStatusNow
         )
-  }, [
-    agentStatusEpoch,
-    agentStatusNow,
-    showSleepingWorkspaces,
-    tabsByWorktree,
-    unifiedTabsByWorktree
-  ])
+  }, [agentStatusEpoch, agentStatusNow, showSleepingWorkspaces, tabsByWorktree])
   const sleepingSweepExemptWorktreeIds = useSleepingSweepRetention({
     enabled: !showSleepingWorkspaces,
     worktreesByRepo,
