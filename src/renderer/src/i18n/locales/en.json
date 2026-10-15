@@ -18233,6 +18233,9 @@
       "empty": "No users found"
     },
     "native-chat": {
+      "install": {
+        "checking": "Checking whether {{agent}} is ready on this host…"
+      },
       "reasoning": "Reasoning",
       "failureWords": {
         "theAgent": "The agent",
