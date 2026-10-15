@@ -1,4 +1,4 @@
-import { useEffect, useState, useSyncExternalStore } from 'react'
+import { useSyncExternalStore } from 'react'
 import type { GlobalSettings } from '../../../../shared/global-settings-types'
 import { LOCAL_EXECUTION_HOST_ID } from '../../../../shared/execution-host'
 import type { RuntimeClientTarget } from '../../../../shared/runtime-client-target'
@@ -20,7 +20,6 @@ import {
   useManagedRuntimeInstall,
   type ManagedRuntimeInstallObservation
 } from '@/runtime/use-managed-runtime-install'
-import { callAntigravityAccounts } from '@/runtime/runtime-antigravity-accounts-client'
 import { useAppStore } from '../../store'
 import { readNativeDetectedAgents } from '@/store/slices/local-detected-agent-store-state'
 import { createAgentSettingsUpdateQueue } from './agent-availability-settings'
@@ -123,23 +122,6 @@ function AntigravityChatProviderSignIn({
 }: {
   runtime: Extract<ManagedRuntimeInstallObservation, { kind: 'active' }>
 }): React.JSX.Element {
-  const [saved, setSaved] = useState(false)
-  const [listRequest, setListRequest] = useState(0)
-  useEffect(() => {
-    let cancelled = false
-    // A failed read leaves the row offering sign-in, which is still correct to act on.
-    void callAntigravityAccounts(CHAT_HOST, { runtime: 'host' }, 'List').then(
-      (state) => {
-        if (!cancelled) {
-          setSaved(state.chatSignIn?.saved === true)
-        }
-      },
-      () => undefined
-    )
-    return () => {
-      cancelled = true
-    }
-  }, [listRequest])
   return (
     <AntigravityChatSignInRow
       owner={CHAT_HOST}
@@ -148,9 +130,7 @@ function AntigravityChatProviderSignIn({
         'settings.chat.providers.antigravitySignIn',
         'Chats use their own Antigravity sign-in, separate from your agy terminal account. Sign in once on this device.'
       )}
-      saved={saved}
       disabled={antigravityChatSignInBlocked(runtime)}
-      onSettled={() => setListRequest((request) => request + 1)}
     />
   )
 }
