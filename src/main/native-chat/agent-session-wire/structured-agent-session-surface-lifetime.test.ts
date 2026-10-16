@@ -45,6 +45,7 @@ import { codexProviderHandle } from '../../../shared/agent-session-provider-hand
 import { NO_STRUCTURED_AGENTS } from './structured-agent-session-adapter-router-test-support'
 import { startsWhenPublished } from './structured-agent-session-instant-start.test-support'
 
+const REQUESTED_CLOSE_END = { type: 'ended', reason: 'closed', cause: 'requested-close' } as const
 const UNEXPECTED_PROVIDER_EXIT_OUTCOME =
   'Codex stopped while this response was in progress. You can continue in this conversation.'
 
@@ -243,10 +244,8 @@ beforeEach(async () => {
     const child = host['sessions'].get(sessionId)?.child
     if (child?.generation) {
       void host.handleAdapterEvent({
-        type: 'ended',
+        ...REQUESTED_CLOSE_END,
         sessionId,
-        reason: 'closed',
-        cause: 'requested-close',
         fence: child.fence,
         acquisitionGeneration: child.generation
       })
@@ -276,7 +275,8 @@ describe('a chat that closes', () => {
 
     expect(await host.sleepWorkspace('workspace-1')).toEqual({ stoppedSessionIds: [SESSION] })
     expect(reported).toHaveBeenCalledWith(expect.objectContaining({ cause: 'requested-close' }))
-    expect(store.getRecord(SESSION)).not.toBeNull()
+    // History stays saved while the conversation handle closes.
+    expect([store.getRecord(SESSION) !== null, host.hasSession(SESSION)]).toEqual([true, false])
     expect(await host.sleepWorkspace('other-workspace')).toEqual({ stoppedSessionIds: [] })
   })
 
@@ -288,6 +288,7 @@ describe('a chat that closes', () => {
       stoppedSessionIds: [],
       failures: [{ sessionId: SESSION, reason: 'stop-unverifiable' }]
     })
+    expect(store.getRecord(SESSION)).not.toBeNull()
   })
 
   it('does not count a chat whose send was accepted after the stop as stopped', async () => {
