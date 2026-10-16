@@ -28,7 +28,12 @@ import { ManagedRuntimeInstallRow } from '../managed-runtime/ManagedRuntimeInsta
 import { SearchableSetting } from './SearchableSetting'
 import { SettingsSubsectionHeader, SettingsSwitch } from './SettingsFormControls'
 import { getChatProvidersSearchEntry } from './chat-providers-search'
-import { AntigravityChatSignInRow, antigravityChatSignInBlocked } from './AntigravityChatSignInRow'
+import { antigravityChatSignInRunning } from '@/runtime/antigravity-chat-sign-in-status'
+import {
+  AntigravityChatSignInRow,
+  antigravityChatSignInBlocked,
+  useAntigravityChatSignIn
+} from './AntigravityChatSignInRow'
 import { getHostRuntimeLabel, getRuntimeSentenceLabel } from './accounts-pane-runtime'
 
 const enqueueProviderUpdate = createAgentSettingsUpdateQueue()
@@ -106,32 +111,44 @@ function ProviderDetail(props: {
   }
   return (
     <div className="mt-2">
-      <ManagedRuntimeInstallRow
-        observation={runtime}
-        agentLabel={getAgentLabel(props.agent)}
-        surface="settings"
-      />
-      {props.agent === 'antigravity' ? <AntigravityChatProviderSignIn runtime={runtime} /> : null}
+      {props.agent === 'antigravity' ? (
+        <AntigravityChatProvider runtime={runtime} />
+      ) : (
+        <ManagedRuntimeInstallRow
+          observation={runtime}
+          agentLabel={getAgentLabel(props.agent)}
+          surface="settings"
+        />
+      )}
     </div>
   )
 }
 
 /** Antigravity chats sign in on this computer, directly below the program they run. */
-function AntigravityChatProviderSignIn({
+function AntigravityChatProvider({
   runtime
 }: {
   runtime: Extract<ManagedRuntimeInstallObservation, { kind: 'active' }>
 }): React.JSX.Element {
+  const signIn = useAntigravityChatSignIn(CHAT_HOST)
   return (
-    <AntigravityChatSignInRow
-      owner={CHAT_HOST}
-      label={getRuntimeSentenceLabel({ runtime: 'host', label: getHostRuntimeLabel() })}
-      description={translate(
-        'settings.chat.providers.antigravitySignIn',
-        'Chats use their own Antigravity sign-in, separate from your agy terminal account. Sign in once on this device.'
-      )}
-      disabled={antigravityChatSignInBlocked(runtime)}
-    />
+    <>
+      <ManagedRuntimeInstallRow
+        observation={runtime}
+        agentLabel={getAgentLabel('antigravity')}
+        surface="settings"
+        signInRunning={antigravityChatSignInRunning(signIn.flow)}
+      />
+      <AntigravityChatSignInRow
+        owner={CHAT_HOST}
+        label={getRuntimeSentenceLabel({ runtime: 'host', label: getHostRuntimeLabel() })}
+        description={translate(
+          'settings.chat.providers.antigravitySignIn',
+          'Chats use their own Antigravity sign-in, separate from your agy terminal account. Sign in once on this device.'
+        )}
+        disabled={antigravityChatSignInBlocked(runtime)}
+      />
+    </>
   )
 }
 
