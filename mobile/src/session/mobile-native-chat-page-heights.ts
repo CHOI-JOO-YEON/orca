@@ -99,7 +99,7 @@ export class MobileNativeChatPageHeights {
     const valid = (i: number): boolean =>
       this.valid(keys[i]!, drawn.rows[i]!, drawn.rowState(i, drawn.rows[i]!), layout)
     let [to, distance] = [start - 1, 0]
-    for (; to >= 0 && valid(to); to -= 1) {
+    for (; to >= 0 && distance <= reach && valid(to); to -= 1) {
       distance += this.px(keys[to]) ?? 0
     }
     if (to < 0 || distance > reach) {

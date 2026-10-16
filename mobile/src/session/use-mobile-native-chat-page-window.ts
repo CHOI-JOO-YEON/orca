@@ -9,7 +9,9 @@ import { coverMobileNativeChatWindow } from './mobile-native-chat-page-window-co
 import { useMobileNativeChatPageRender } from './use-mobile-native-chat-page-render'
 
 /** Rows measured in one settled moment: few enough not to drop a frame. */
-const MEASURE_ROWS = 12
+const MEASURE_ROWS = 8
+/** Between measuring rounds, so a streamed reply still gets frames while rows are measured. */
+const MEASURE_GAP_MS = 32
 /** A parked reader's unmeasured rows are measured only within this many screens above them. */
 const MEASURE_REACH = 3
 /** While following, every measured row is checked for a change at most this often. */
@@ -76,7 +78,6 @@ export function useMobileNativeChatPageWindow(args: {
   const settle = useRef(false)
   const [drawnRows] = useState(() => new MobileNativeChatPageRows())
   const anchorStale = useRef(false)
-  const readerMoved = useRef<((moved: number, fromEnd: number) => void) | null>(null)
   const width = useRef(0)
   const viewport = useRef(globalThis.innerHeight || 800)
   const lastScan = useRef(0)
@@ -219,6 +220,7 @@ export function useMobileNativeChatPageWindow(args: {
     if (measure?.from !== cur.measure?.from || measure?.to !== cur.measure?.to || cur.slack > 0) {
       w.current = { ...cur, measure }
       settle.current = true
+      motion.quiet(MEASURE_GAP_MS)
       render()
     }
   }, [heights, motion, render])
@@ -257,11 +259,10 @@ export function useMobileNativeChatPageWindow(args: {
       // A write's or layout's event can arrive after rows above changed and before the correction:
       // taking the place or covering then would keep the moved position and draw what moved it.
       const max = s.scrollHeight - s.clientHeight
-      const { by, moved } = motion.scrolled(s.scrollTop, max, () => drawnRows.placeMoved(s))
+      const { by } = motion.scrolled(s.scrollTop, max, () => drawnRows.placeMoved(s))
       if (by === 'reader') {
         takeAnchor(s)
         cover(s)
-        readerMoved.current?.(moved, max - s.scrollTop)
       }
     }
     const detach = motion.attach(s)
@@ -276,10 +277,10 @@ export function useMobileNativeChatPageWindow(args: {
   /** The one observer's entries: rows measured, then, for a settled parked reader, whatever moved the
    *  row they were reading goes back (a measured row, the header, given-back space). */
   const afterResize = useCallback(
-    (entries: readonly ResizeObserverEntry[]) => {
+    (entries: readonly ResizeObserverEntry[], pin: () => void) => {
       const [s, at] = [scroller(), drawn.current]
       if (!s || !at) {
-        return
+        return pin()
       }
       viewport.current = s.clientHeight
       width.current = s.clientWidth
@@ -300,9 +301,8 @@ export function useMobileNativeChatPageWindow(args: {
         // Rows above moved by `shift`: put that back, keep the reader's own move, undo a clamp.
         write(s, s.scrollTop - (by === 'layout' ? moved : 0) + shift)
       }
-      if (by === 'reader') {
-        readerMoved.current?.(moved, max - s.scrollTop)
-      }
+      // After the reader's unreported move is counted (it may end following), so the pin can't undo it.
+      pin()
       // The place is where the reader is now: a correction that couldn't land, or a move while
       // they scrolled, is not owed later.
       takeAnchor(s)
@@ -333,7 +333,7 @@ export function useMobileNativeChatPageWindow(args: {
       observeWith: drawnRows.observeWith,
       settled: () => motion.whenSettled(),
       watchReader: (fn: ((moved: number, fromEnd: number) => void) | null) => {
-        readerMoved.current = fn
+        motion.onReader = fn
       },
       wrote: (target: number) => motion.wrote(target)
     }),

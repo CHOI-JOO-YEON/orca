@@ -54,8 +54,9 @@ export type MobileNativeChatListHandle = {
   getScrollableNode: () => PageScroller | null | undefined
   scrollToOffset: (params: { animated: boolean; offset: number }) => void
   scrollToEnd: (params: { animated: boolean }) => void
-  /** Page only: runs after the end pin on each resize, with the observer's entries. */
-  afterResize?: (entries: readonly ResizeObserverEntry[]) => void
+  /** Page only: each resize, with the observer's entries; runs the end `pin` once it has counted a
+   *  move of the reader's no scroll event reported yet. */
+  afterResize?: (entries: readonly ResizeObserverEntry[], pin: () => void) => void
   /** Page only: the list's rows join the one observer, so each reports its own height. */
   observeWith?: (observer: ResizeObserver | null) => void
   /** Page only: the place-hold's correction, never written while the reader moves. */
@@ -165,10 +166,9 @@ export function useMobileNativeChatTailFollow(args: {
       listRef.current = list
       const page = !listReportsGestures()
       const observer = page
-        ? observePageResize(list?.getScrollableNode(), (entries) => {
-            pinPageToEnd()
-            list?.afterResize?.(entries)
-          })
+        ? observePageResize(list?.getScrollableNode(), (entries) =>
+            list?.afterResize ? list.afterResize(entries, pinPageToEnd) : pinPageToEnd()
+          )
         : null
       list?.observeWith?.(observer)
       // The page reports no drag: the list says which scrolls were the reader's, and how far.

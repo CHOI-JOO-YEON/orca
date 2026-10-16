@@ -23,6 +23,10 @@ export class MobileNativeChatPageMotion {
   private own: number[] = []
   private timer: ReturnType<typeof setTimeout> | undefined
   private later: ReturnType<typeof setTimeout> | undefined
+  /** Owed work doesn't run again before this, so other work gets frames between its rounds. */
+  private quietUntil = 0
+  /** Told each move that was the reader's, with how far it is from the end. */
+  onReader: ((moved: number, fromEnd: number) => void) | null = null
   private waiters: (() => void)[] = []
 
   constructor(private readonly onSettled: () => void) {}
@@ -106,6 +110,7 @@ export class MobileNativeChatPageMotion {
     }
     this.lastReaderScroll = Date.now()
     this.poke()
+    this.onReader?.(moved, max - scrollTop)
     return { by: 'reader', moved }
   }
 
@@ -133,16 +138,22 @@ export class MobileNativeChatPageMotion {
     if (this.touching || this.timer !== undefined) {
       return
     }
-    const wait = Math.max(0, REST_MS - (Date.now() - this.lastReaderScroll))
+    const now = Date.now()
+    const wait = Math.max(0, REST_MS - (now - this.lastReaderScroll), this.quietUntil - now)
     this.timer = setTimeout(() => {
       this.timer = undefined
-      if (!this.settled()) {
+      if (!this.settled() || Date.now() < this.quietUntil) {
         this.poke()
         return
       }
       this.waiters.splice(0).forEach((resolve) => resolve())
       this.onSettled()
     }, wait)
+  }
+
+  /** Owed work waits `ms` before its next round. */
+  quiet(ms: number): void {
+    this.quietUntil = Date.now() + ms
   }
 
   /** Checks for owed work again after `ms`, when nothing else will. */
