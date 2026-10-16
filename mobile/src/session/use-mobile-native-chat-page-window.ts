@@ -171,7 +171,8 @@ export function useMobileNativeChatPageWindow(args: {
           n: at.keys.length,
           start: at.start,
           end: at.end,
-          following: at.following,
+          // Drawn to the end only while it is near: a jump away is drawn where it lands, not to the end.
+          following: at.following && s.scrollTop >= s.scrollHeight - 2 * s.clientHeight,
           windowTop:
             firstNode.getBoundingClientRect().top - s.getBoundingClientRect().top + s.scrollTop,
           scrollTop: s.scrollTop,
