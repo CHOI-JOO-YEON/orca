@@ -55,12 +55,26 @@ describe('execution-host conversation writer inspection', () => {
     await expect(inspection().run()).resolves.toBeUndefined()
     for (const cause of ['missing-pane', 'missing-row', 'sleeping', 'failed-scan', 'shared-server', 'unknown-topology'] as const) {
       const check = inspection()
-      if (cause === 'missing-pane') check.host.pane = () => null
-      if (cause === 'missing-row') check.host.observation = () => null
-      if (cause === 'sleeping') check.host.sleeping = () => true
-      if (cause === 'failed-scan') check.host.rows = () => { throw new Error('unavailable') }
-      if (cause === 'shared-server') check.observation.topology = 'shared'
-      if (cause === 'unknown-topology') check.observation.topology = 'unverifiable'
+      if (cause === 'missing-pane') {
+        check.host.pane = () => null
+      }
+      if (cause === 'missing-row') {
+        check.host.observation = () => null
+      }
+      if (cause === 'sleeping') {
+        check.host.sleeping = () => true
+      }
+      if (cause === 'failed-scan') {
+        check.host.rows = () => {
+          throw new Error('unavailable')
+        }
+      }
+      if (cause === 'shared-server') {
+        check.observation.topology = 'shared'
+      }
+      if (cause === 'unknown-topology') {
+        check.observation.topology = 'unverifiable'
+      }
       await expect(check.run()).rejects.toMatchObject(refusal)
     }
   })
@@ -69,8 +83,11 @@ describe('execution-host conversation writer inspection', () => {
     for (const replace of ['row', 'pty'] as const) {
       const check = inspection('exited')
       check.observation.presence = async () => {
-        if (replace === 'row') check.replaceRow()
-        else check.replacePty()
+        if (replace === 'row') {
+          check.replaceRow()
+        } else {
+          check.replacePty()
+        }
         return 'exited'
       }
       await expect(check.run()).rejects.toMatchObject(refusal)

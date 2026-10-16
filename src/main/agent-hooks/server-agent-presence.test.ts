@@ -88,7 +88,9 @@ describe('host-owned hook presence', () => {
     await hook(server, 'SessionStart')
     const row = server.getStatusSnapshot().find((entry) => entry.paneKey === PANE)
     expect(row).toBeDefined()
-    if (!row) throw new Error('Missing hook row')
+    if (!row) {
+      throw new Error('Missing hook row')
+    }
     const observed = server.readCliWriterObservation(row)
     probe.mockResolvedValue('exited')
     expect(await observed?.presence()).toBe('exited')

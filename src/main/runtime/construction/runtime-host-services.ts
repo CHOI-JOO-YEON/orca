@@ -150,8 +150,6 @@ export abstract class OrcaRuntimeWithPreservedBranchCleanup extends OrcaRuntimeW
     | HostBindings['retireAgentHookCompatibilityAuthority']
     | null
 
-  protected readonly readHookCliWriterObservationFn!: HostBindings['readHookCliWriterObservation'] | null
-
   protected readonly checkHookAgentPresenceFn!: HostBindings['checkHookAgentPresence'] | null
 
   protected readonly reconcileAgentStatusForEndedProcessFn!:
