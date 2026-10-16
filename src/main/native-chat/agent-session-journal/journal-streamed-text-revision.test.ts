@@ -38,9 +38,12 @@ it('keeps image and goal transitions FULL, streams text at NORMAL, and restores 
   levels.push(journalPragmaNumber(database.db, 'synchronous'))
   database.transaction((db) => levels.push(journalPragmaNumber(db, 'synchronous')))
   expect(() =>
-    database.transaction(() => {
-      throw new Error('rolled back')
-    }, true)
+    database.transaction(
+      () => {
+        throw new Error('rolled back')
+      },
+      { streamed: true }
+    )
   ).toThrow('rolled back')
   levels.push(journalPragmaNumber(database.db, 'synchronous'))
   expect(levels).toEqual([1, 2, 2, 2])
