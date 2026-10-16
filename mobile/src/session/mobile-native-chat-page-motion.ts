@@ -73,14 +73,9 @@ export class MobileNativeChatPageMotion {
   }
 
   /** The resize callback reconciled layout: what moved the scroll since the page last accounted
-   *  for it is now told apart (a scroll event may not have reported it yet), or is `layout`'s. */
-  reconciled(scrollTop: number, max: number, layout: boolean): Moved {
+   *  for it is now told apart (a scroll event may not have reported it yet). */
+  reconciled(scrollTop: number, max: number): Moved {
     this.unreconciled = false
-    if (layout) {
-      const moved = scrollTop - this.seen
-      ;[this.seen, this.seenMax] = [scrollTop, max]
-      return { by: 'layout', moved }
-    }
     return this.account(scrollTop, max)
   }
 

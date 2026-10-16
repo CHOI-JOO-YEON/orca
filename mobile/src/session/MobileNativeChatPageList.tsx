@@ -7,12 +7,10 @@ import {
   type Ref
 } from 'react'
 import {
-  StyleSheet,
   View,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
-  type ScrollView,
-  type ViewStyle
+  type ScrollView
 } from 'react-native'
 import type { NativeChatMessage } from '../../../src/shared/native-chat-types'
 import { MobileNativeChatKeptScope } from './mobile-native-chat-kept-disclosures'
@@ -122,19 +120,14 @@ export function MobileNativeChatPageList({
       ) : (
         // Rows unmount once scrolled past; what the reader opened in this chat outlives them.
         <MobileNativeChatKeptScope key={rowKeys.scope}>
-          <View style={[pageList.spacer, { height: view.above }]} />
+          <View style={{ height: view.above }} />
           {rows.slice(view.m0, view.m1).map((item, at) => drawRow(item, view.m0 + at))}
-          <View style={[pageList.spacer, { height: view.mid }]} />
+          <View style={{ height: view.mid }} />
           {rows.slice(view.start, view.end).map((item, at) => drawRow(item, view.start + at))}
-          <View style={[pageList.spacer, { height: view.bottom }]} />
+          <View style={{ height: view.bottom }} />
         </MobileNativeChatKeptScope>
       )}
       {footer}
     </MobileNativeChatPageScroll>
   )
 }
-
-// Spacers stay out of the browser's scroll anchoring, so a drawn row is its anchor.
-const spacer: ViewStyle & { overflowAnchor: 'none' } = { overflowAnchor: 'none' }
-
-const pageList = StyleSheet.create({ spacer })

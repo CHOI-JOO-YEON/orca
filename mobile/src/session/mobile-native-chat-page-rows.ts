@@ -79,14 +79,6 @@ export class MobileNativeChatPageRows {
     return now + scroller.scrollTop - this.anchor.top - this.anchor.scrollTop
   }
 
-  /** The anchored row is where it was on screen (the browser's own scroll anchoring may have kept
-   *  it there). */
-  placeHeld(scroller: Scroller): boolean {
-    const node = this.node(this.anchor?.key)
-    const now = node && node.getBoundingClientRect().top - scroller.getBoundingClientRect().top
-    return this.anchor !== null && now !== undefined && Math.abs(now - this.anchor.top) < 0.5
-  }
-
   placeMoved(scroller: Scroller): boolean {
     return Math.abs(this.placeShift(scroller) ?? 0) >= 0.5
   }
