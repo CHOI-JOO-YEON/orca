@@ -39,8 +39,14 @@ export type RuntimeConstructionDependencies = {
   }) => AgentHookAuthorityAttestation | null
   retireAgentHookCompatibilityAuthority?: (paneKey: string) => void
   readHookCliWriterObservation?: (row: AgentStatusIpcPayload) => CliWriterObservation | null
-  checkHookAgentPresence?: (paneKey: string) => Promise<'live' | 'unverifiable' | 'exited' | null>
+  /** `exitedSince`: also answer `exited` for an exit the hook store proved at or after it. */
+  checkHookAgentPresence?: (
+    paneKey: string,
+    exitedSince?: number
+  ) => Promise<'live' | 'unverifiable' | 'exited' | null>
   reconcileAgentStatusForEndedProcess?: (paneKeys: Iterable<string>) => void
+  /** A worker attached to these panes; an exit the hook store proved before then is not its own. */
+  forgetHookAgentExit?: (paneKeys: Iterable<string>) => void
   dropAgentStatusForRemovedWorktree?: (worktreeId: string, host?: ExecutionHostScope) => void
   canRecoverPersistentLocalPtys?: () => boolean
   getPairedDeviceName?: (pairedDeviceId: string) => string | null

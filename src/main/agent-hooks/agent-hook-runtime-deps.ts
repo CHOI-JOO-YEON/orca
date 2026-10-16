@@ -37,9 +37,17 @@ export function agentHookRuntimeDeps(
       readChildWorkRecords: (subject) => server.getStructuredChildWork(subject)
     },
     readHookCliWriterObservation: (row) => server.readCliWriterObservation(row),
-    checkHookAgentPresence: (paneKey) => server.checkAgentPresence(paneKey),
+    checkHookAgentPresence: (paneKey, exitedSince) =>
+      exitedSince === undefined
+        ? server.checkAgentPresence(paneKey)
+        : server.checkAgentPresenceSince(paneKey, exitedSince),
     reconcileAgentStatusForEndedProcess: (paneKeys) =>
       server.reconcileEndedProcessForPaneKeys(paneKeys),
+    forgetHookAgentExit: (paneKeys) => {
+      for (const paneKey of paneKeys) {
+        server.forgetAgentExit(paneKey)
+      }
+    },
     dropAgentStatusForRemovedWorktree: (worktreeId, host) =>
       server.dropStatusEntriesForRemovedWorktree(worktreeId, host),
     buildAgentHookPtyEnv: () =>
