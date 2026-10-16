@@ -63,7 +63,8 @@ export abstract class AgentHookServerAgentPresence extends AgentHookServerLifecy
     const token = this.token
     const generation = this.statusHookGeneration
     const presence = row.agentPresence
-    const topology = OPEN_CODE_WRITER_TOPOLOGY in row ? row[OPEN_CODE_WRITER_TOPOLOGY] : undefined
+    const binding = row.providerSession
+    const topology = binding && OPEN_CODE_WRITER_TOPOLOGY in binding ? binding[OPEN_CODE_WRITER_TOPOLOGY] : undefined
     return {
       current: () => this.statusHooksEnabled && this.token === token &&
         this.statusHookGeneration === generation &&
@@ -72,7 +73,7 @@ export abstract class AgentHookServerAgentPresence extends AgentHookServerLifecy
       presence: () => presence?.process
         ? probeAgentProcessPresence(presence.process)
         : Promise.resolve(null),
-      topology: row.source !== 'opencode' && row.source !== 'mimo-code' &&
+      topology: row.source !== 'opencode' && row.source !== 'opencode2' && row.source !== 'mimo-code' &&
         row.payload.agentType !== 'opencode' && row.payload.agentType !== 'opencode2'
         ? 'pane-owned'
         : topology === 'pane-owned' || topology === 'shared' ? topology : 'unverifiable'
