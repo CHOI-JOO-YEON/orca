@@ -47,11 +47,11 @@ export async function inspectLocalPtyChildProcesses(id: string): Promise<PtyChil
     return 'unverifiable'
   }
   try {
+    if (process.platform === 'win32') {
+      const verdict = await inspectSpawnFileWindowsChildProcesses(proc, ptyShellPath.get(id) ?? '')
+      return ptyProcesses.get(id) === proc ? verdict : 'unverifiable'
+    }
     if (ptyProcessNameIsSpawnFile(proc)) {
-      if (process.platform === 'win32') {
-        const verdict = await inspectSpawnFileWindowsChildProcesses(proc, ptyShellPath.get(id) ?? '')
-        return ptyProcesses.get(id) === proc ? verdict : 'unverifiable'
-      }
       const snapshot = await getStrictProcessTableSnapshotWithAge()
       return ptyProcesses.get(id) === proc
         ? inspectSpawnFileChildProcessesFromRows(

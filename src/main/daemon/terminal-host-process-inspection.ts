@@ -91,8 +91,8 @@ export async function inspectTerminalHostProcess(args: {
   } else if (process.platform === 'win32') {
     if (session.processNameIsSpawnFile) {
       foregroundProcess = await session.confirmForegroundProcess()
-      childProcessEvidence = await session.inspectChildProcesses()
     }
+    childProcessEvidence = await session.inspectChildProcesses()
     // Unverifiable whatever `ps` says, and an MSYS `ps.exe` on PATH would flash a console.
     evidence = unverifiableEvidence(args, session, 'windows_ssh_foreground_unavailable')
   } else {
