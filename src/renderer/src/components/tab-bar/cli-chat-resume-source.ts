@@ -19,10 +19,6 @@ export type CliChatResumeSource = {
   executionHostId: ExecutionHostId
 }
 
-export function cliChatResumeNeedsConfirmation(state: AppState, source: CliChatResumeSource): boolean {
-  return state.agentStatusByPaneKey[source.paneKey]?.state !== 'done'
-}
-
 export function resolveCliChatResumeSource(
   state: AppState,
   args: { tab: { id: string; worktreeId: string }; paneKey?: string }

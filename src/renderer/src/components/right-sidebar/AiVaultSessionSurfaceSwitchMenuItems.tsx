@@ -12,7 +12,6 @@ export function AiVaultSessionSurfaceSwitchMenuItems({
   menuKind,
   tooltipSide,
   chatPending,
-  chatLabel,
   onResumeInNewChat,
   onResumeInNewCli,
   cliPending = false
@@ -20,7 +19,6 @@ export function AiVaultSessionSurfaceSwitchMenuItems({
   menuKind: 'dropdown' | 'context'
   tooltipSide: 'left' | 'right'
   chatPending?: boolean
-  chatLabel?: string
   onResumeInNewChat?: (event: Event) => void
   onResumeInNewCli?: (event: Event) => void
   cliPending?: boolean
@@ -35,7 +33,7 @@ export function AiVaultSessionSurfaceSwitchMenuItems({
           aria-busy={chatPending || undefined}
         >
           <MessagesSquare className="size-3.5" />
-          {chatLabel ?? translate(
+          {translate(
             'auto.components.right.sidebar.AiVaultSessionRow.resumeInNewNativeChat',
             'Resume in New Native Chat'
           )}

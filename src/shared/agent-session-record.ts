@@ -29,7 +29,6 @@ import {
   type AgentSessionProviderContextBoundary
 } from './agent-session-provider-context'
 import { isStructuredAgentId } from './agent-session-provider-handle-encoding'
-import { isSavedAgentProcessIdentitySet, type AgentProcessIdentity } from './agent-process-presence'
 import {
   isAgentSessionAccountHome,
   MAX_PATH_LENGTH,
@@ -151,7 +150,6 @@ export type AgentSessionRecord = {
   /** The agent this session names, whether this build can run it or not. */
   provider: string
   providerHandleChain: AgentSessionProviderHandleLink[]
-  adoptionSurvivors?: AgentProcessIdentity[]
   providerContextBoundary?: AgentSessionProviderContextBoundary
   accountHome: AgentSessionAccountHome
   /** The directory the provider first launched in, in the execution host's path syntax. Floating
@@ -372,9 +370,9 @@ export function isPersistedAgentSessionRecord(
       isAgentSessionProviderContextBoundary(record.providerContextBoundary)) &&
     (record.conversationCommand === undefined ||
       isAgentSessionConversationCommandRecord(record.conversationCommand)) &&
-    (record.conversationName === undefined || isAgentSessionConversationName(record.conversationName)) &&
+    (record.conversationName === undefined ||
+      isAgentSessionConversationName(record.conversationName)) &&
     (record.launchArgs === undefined || isAgentSessionLaunchArgs(record.launchArgs)) &&
-    (record.adoptionSurvivors === undefined || isSavedAgentProcessIdentitySet(record.adoptionSurvivors)) &&
     !Object.hasOwn(record, 'launchEnv') &&
     isPersistedAgentSessionLease(record.lease) &&
     record.lease.sessionId === record.sessionId &&

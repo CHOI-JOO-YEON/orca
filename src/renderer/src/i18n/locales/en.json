@@ -18205,15 +18205,6 @@
       "empty": "No users found"
     },
     "native-chat": {
-      "switch": { "action": "Switch to Chat (closes terminal)" },
-      "stopAndSwitch": {
-        "action": "Stop and Switch to Chat (closes terminal)",
-        "title": "Stop {{agent}} and continue in chat?",
-        "description": "This closes the terminal and stops the current step. Everything saved so far stays in the conversation.",
-        "confirm": "Stop and Switch",
-        "stopUnconfirmed": "Could not confirm {{agent}} stopped in the terminal. Exit it there, then retry from the chat.",
-        "exitFirst": "Exit {{agent}} in the terminal first, then resume this conversation in chat."
-      },
       "reasoning": "Reasoning",
       "failureWords": {
         "theAgent": "The agent",
@@ -18704,6 +18695,7 @@
         "showTerminal": "Show terminal"
       },
       "resumeInNewChat": {
+        "exitFirst": "Exit {{agent}} in the terminal, then open this conversation from Session History.",
         "notSavedYet": "{{agent}} hasn't saved this conversation yet. Try again after it replies.",
         "cannotResume": "This {{agent}} conversation can't be resumed in a native chat."
       },

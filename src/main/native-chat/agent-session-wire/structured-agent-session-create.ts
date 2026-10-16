@@ -1,16 +1,14 @@
 import { isFloatingWorkspaceId } from '../../../shared/floating-workspace-worktree'
 import { isAgentSessionCreateAdmissionRefusal } from '../../../shared/agent-session-definitive-refusal'
 import type { AgentJournalMessageItem } from '../../../shared/agent-session-journal-types'
+import { computeAgentSessionPayloadFingerprint } from '../../../shared/agent-session-mutation-envelope'
 import {
   refuse,
   type AgentSessionAttachResult,
   type AgentSessionMutationResult
 } from '../../../shared/agent-session-wire'
-import {
-  AgentSessionRefusalError,
-  agentSessionRefusalError,
-  isAgentSessionRefusalError
-} from '../../../shared/agent-session-wire-refusals'
+import type { StructuredAgentSessionCaller } from './structured-agent-session-host-types'
+import { isAgentSessionRefusalError } from '../../../shared/agent-session-wire-refusals'
 import { journalOpenRefusalError } from '../agent-session-journal/journal-open-failure'
 import type { StructuredAgentSessionAttachContext } from './structured-agent-session-attach-context'
 import { reserveRequestFor, type AgentSessionAttachParams } from './structured-agent-session-attach'
@@ -27,23 +25,17 @@ import {
   adapterSupportsCreateIfDeclared,
   hostCanStartRecord
 } from './structured-agent-session-provider-support'
-import { sendOpeningAgentSessionMessage } from './structured-agent-session-create-opening-message'
+import { performSend } from './structured-agent-session-turns'
+import { observedReceipt } from './structured-agent-session-operation-settlement'
+import { attachStructuredAgentSession } from './structured-agent-session-attach-orchestration'
 import { readAgentSessionHydrationPage } from './agent-session-history-page'
 import { resolveAgentSessionReplayOutcome } from './structured-agent-session-replay-outcome'
-import type { CliSourceStopHost } from '../../runtime/structured-agent-cli-stop'
-import type { StructuredAgentSessionResumeSource } from '../../../shared/structured-agent-session-create'
-import { stopCliSourceBeforeAdoption } from './structured-agent-session-cli-handoff'
 
 export type StructuredAgentSessionCreateOptions = {
   firstMessage?: { clientMessageId: string; body: AgentJournalMessageItem }
   hostLaunchDirectory?: string
   /** Called after the durable create, before delivery can start the agent. */
   publishTab?: () => Promise<void>
-  cliSourceStop?: {
-    host: CliSourceStopHost
-    resumeFrom: StructuredAgentSessionResumeSource
-    workspaceId: string
-  }
 }
 
 /** Founds a chat and its opening message; only the delivery loop acquires the agent. */
@@ -110,7 +102,7 @@ async function foundConversation(
   if (!prior && isFloatingWorkspaceId(params.location.workspaceId) && !launchDirectory) {
     throw new Error('floating_agent_session_launch_directory_unavailable')
   }
-  const baseRequest = reserveRequestFor({
+  const request = reserveRequestFor({
     sessionId,
     params,
     callerKey,
@@ -128,9 +120,6 @@ async function foundConversation(
       ...(await pinnedAgentSessionLaunchEnv(deps.resolveLaunchEnv, params))
     }
   })
-  const request = options.cliSourceStop
-    ? { ...baseRequest, adoptionHandoff: true }
-    : baseRequest
   const candidate = store.founding.prepare(request)
   if (!hostCanStartRecord(deps, candidate.record)) {
     return {
@@ -161,7 +150,7 @@ async function foundConversation(
             )
     }
   }
-  let prepared = replayed
+  const prepared = replayed
     ? { ok: true as const, items: null }
     : await prepareAdoptedTranscript(params)
   if (!prepared.ok) {
@@ -189,22 +178,8 @@ async function foundConversation(
   const { session } = opened
   const fence = candidate.record.lease.runtimeFence
   let committed = replayed
-  let reservedAdoption = false
-  let cancelledBeforeStop = false
   try {
     if (!replayed) {
-      if (options.cliSourceStop) {
-        await stopCliSourceBeforeAdoption({
-          store, request, source: options.cliSourceStop, agent: params.agent,
-          priorSurvivors: prior?.adoptionSurvivors,
-          onReserved: () => { reservedAdoption = true },
-          onCancelledBeforeStop: () => { cancelledBeforeStop = true }
-        })
-        prepared = await prepareAdoptedTranscript(params)
-        if (!prepared.ok) {
-          throw new AgentSessionRefusalError(prepared.refusal)
-        }
-      }
       await importAdoptedTranscript(
         params,
         { journal: session.journal, unconfirmedClientMessageIds: [] },
@@ -214,19 +189,38 @@ async function foundConversation(
       )
       const first = options.firstMessage
       if (first) {
-        const sent = await sendOpeningAgentSessionMessage({
-          context, request, params, record: candidate.record, session, callerKey, first
-        })
-        if (!sent.ok) {
-          if (options.cliSourceStop) {
-            await store.founding.failAdoption(request, sent.refusal)
+        const sent = await performSend(
+          {
+            sessionId,
+            journal: session.journal,
+            fence,
+            adapter: deps.adapter,
+            agents: deps.agents,
+            agent: params.agent,
+            logger: deps.logger,
+            resolvedBy: callerKey,
+            persistOptions: async () => {},
+            publish: () => {},
+            operationReceipt: observedReceipt(store, store.founding.receipt(request)),
+            now: context.now
+          },
+          {
+            ...first,
+            payloadFingerprint: computeAgentSessionPayloadFingerprint({
+              method: 'agentSession.send',
+              sessionId,
+              fields: { body: first.body }
+            }),
+            origin: 'client',
+            source: { kind: 'user' },
+            ...openingMessageOptions(candidate.record.options)
           }
+        )
+        if (!sent.ok) {
           return sent
         }
       } else {
-        await (options.cliSourceStop
-          ? store.founding.completeAdoption(request)
-          : store.founding.commit(request))
+        await store.founding.commit(request)
       }
       committed = true
     }
@@ -274,32 +268,36 @@ async function foundConversation(
     }
     context.wakeDelivery?.(sessionId)
     return result
-  } catch (error) {
-    if (!reservedAdoption && options.cliSourceStop && isAgentSessionRefusalError(error)) {
-      return {
-        ok: false,
-        refusal: { ...error.refusal, createAttemptRefusedBeforeCommit: true }
-      }
-    }
-    if (reservedAdoption && !committed && !cancelledBeforeStop) {
-      const refusal = isAgentSessionRefusalError(error)
-        ? error.refusal
-        : {
-            code: 'agent_session_conflict' as const,
-            details: { reason: 'terminalStopUnconfirmed' as const },
-            message: 'The terminal agent could not be confirmed stopped.'
-          }
-      await store.founding.failAdoption(request, refusal)
-      if (!isAgentSessionRefusalError(error)) {
-        throw agentSessionRefusalError('agent_session_conflict', {
-          reason: 'terminalStopUnconfirmed'
-        })
-      }
-    }
-    throw error
   } finally {
     if (!committed && !existing) {
       await session.journal.close()
     }
   }
+}
+
+/** Host entry points that open a chat: attach an existing one or create a new one. */
+export function structuredAgentSessionEntryDelegates(
+  context: () => StructuredAgentSessionAttachContext
+) {
+  return {
+    attach: (
+      caller: StructuredAgentSessionCaller,
+      params: AgentSessionAttachParams,
+      options?: Parameters<typeof attachStructuredAgentSession>[3]
+    ) => attachStructuredAgentSession(context(), caller.callerKey, params, options),
+    create: (
+      caller: StructuredAgentSessionCaller,
+      params: AgentSessionAttachParams,
+      options?: StructuredAgentSessionCreateOptions
+    ) => createStructuredAgentSession(context(), caller.callerKey, params, options)
+  }
+}
+
+/** The model and effort the chat was created with, which its opening message runs on as a send's
+ *  carried ones do. */
+function openingMessageOptions(options: Readonly<Record<string, string>> | undefined): {
+  options?: Readonly<Record<string, string>>
+} {
+  const { model, effort } = options ?? {}
+  return model ? { options: { model, ...(effort ? { effort } : {}) } } : {}
 }

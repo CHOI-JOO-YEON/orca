@@ -4,6 +4,7 @@ import {
 } from '../../native-chat/structured-agent-cli-source'
 import type { OrcaRuntimeWithRestoreStructuredAgentSessionTabsOnce as RestoreStructuredAgentSessionTabsOnceMethods } from './structured-session-tab-restoration'
 import { agentSessionRefusalError } from '../../../shared/agent-session-wire-refusals'
+import { OrcaRuntimeWithStructuredSessionCliWriterHost } from './structured-session-cli-writer-host'
 import { getStructuredAgentSessionHost } from '../../native-chat/agent-session-wire/structured-agent-session-registry'
 import {
   resolveCommittedStructuredAgentSessionAdoptionIntent,
@@ -12,7 +13,6 @@ import {
   type StructuredAgentSessionCreateIntentInput
 } from '../structured-agent-session-create-adoption'
 import { isNativeLocalLocation, LOCAL_EXECUTION_HOST_ID } from '../../../shared/execution-host'
-import { agentSessionExecutionLocationsEqual } from '../../../shared/agent-session-record'
 import { getLocalProjectWorktreeGitOptions } from '../../project-runtime-git-options'
 import type { AgentSessionAttachParams } from '../../native-chat/agent-session-wire/structured-agent-session-attach'
 import {
@@ -31,13 +31,9 @@ import {
 } from '../../../shared/floating-workspace-worktree'
 import { parseWorkspaceKey } from '../../../shared/workspace-scope'
 import type { AgentSessionAccountHome } from '../../../shared/agent-session-account-home'
-import {
-  agentSessionProviderHandleRoot,
-  type StructuredAgentId
-} from '../../../shared/agent-session-provider-handle'
-import { OrcaRuntimeWithStructuredSessionCliSourceHost } from './structured-session-cli-source-host'
+import type { StructuredAgentId } from '../../../shared/agent-session-provider-handle'
 
-export abstract class OrcaRuntimeWithGetStructuredAgentSessionCreateSupport extends OrcaRuntimeWithStructuredSessionCliSourceHost {
+export abstract class OrcaRuntimeWithGetStructuredAgentSessionCreateSupport extends OrcaRuntimeWithStructuredSessionCliWriterHost {
   protected abstract restoreStructuredAgentSessionTabsOnce(
     ...args: Parameters<
       RestoreStructuredAgentSessionTabsOnceMethods['restoreStructuredAgentSessionTabsOnce']
@@ -56,6 +52,41 @@ export abstract class OrcaRuntimeWithGetStructuredAgentSessionCreateSupport exte
       location: await this.resolveStructuredAgentSessionLocation(worktreeSelector),
       runtime: this
     })
+  }
+
+  /** Where a launch of `agent` finds its account, resolved on this host by the agent's own
+   *  registration; null for an agent this runtime does not register, whose create is refused. */
+  protected structuredAgentAccountHomeResolver(
+    agent: StructuredAgentId,
+    worktree: string,
+    purpose: 'launch' | 'read',
+    hostLaunchDirectory?: string
+  ) {
+    const registration = structuredAgentRuntimeMetadata(agent)
+    if (!registration) {
+      return null
+    }
+    const services = {
+      getClaudeConfigDirectory: (target) => this.accounts.getClaudeConfigDirectory(target),
+      prepareCodexLaunchHome: this.prepareCodexStructuredLaunchFn,
+      readCodexLaunchHome: this.resolveCodexStructuredLaunchHomeFn,
+      workspaceTrustSettings: () => this.requireStore().getSettings()
+    }
+    return async ({ launchEnv, location }) =>
+      registration.resolveAccountHome(
+        {
+          launchEnv,
+          location: location ?? null,
+          purpose,
+          workspacePath:
+            purpose === 'launch'
+              ? async () =>
+                  hostLaunchDirectory ??
+                  (await this.resolveRuntimeFileTarget(worktree)).worktree.path
+              : null
+        },
+        services
+      )
   }
 
   /** The definition this runtime registers for `agent`: what its account home pins. Read from the
@@ -209,11 +240,11 @@ export abstract class OrcaRuntimeWithGetStructuredAgentSessionCreateSupport exte
       return committedReplay
     }
     const resumeFrom = input.resumeFrom
-    const unfinished = host?.deps.store.getRecord(input.envelope.sessionId)
-    const reservation = unfinished?.adoptionSurvivors !== undefined ? unfinished : null
+    if (resumeFrom) {
+      await this.assertStructuredAdoptionTerminalWritersExited(input.agent, resumeFrom.providerSessionId)
+    }
     const workspaceCwd = resumeFrom ? (await this.resolveRuntimeFileTarget(input.worktree)).worktree.path : ''
-    const selectedAccountHome = reservation?.accountHome ??
-      await resolveAccountHome({ launchEnv, location })
+    const selectedAccountHome = await resolveAccountHome({ launchEnv, location })
     // Adopting pins the account home to wherever the conversation actually lives, which is not
     // necessarily the one a fresh create would pick: Codex resolves its rollout under
     // `accountHome.path`, and Claude reads its transcript under `<home>/projects`. Resuming under
@@ -225,35 +256,16 @@ export abstract class OrcaRuntimeWithGetStructuredAgentSessionCreateSupport exte
             agent: input.agent,
             transcriptImport,
             providerSessionId: resumeFrom.providerSessionId,
-            resolveTranscriptPath: () => reservation ? undefined :
-              structuredAgentCliSourcePathFromEvidence({
-                agent: input.agent, resumeFrom, workspaceId: location.workspaceId,
-                evidence: input.structuredAgentCliSourceEvidence
-              }),
+            resolveTranscriptPath: () => structuredAgentCliSourcePathFromEvidence({
+              agent: input.agent, resumeFrom, workspaceId: location.workspaceId,
+              evidence: input.structuredAgentCliSourceEvidence
+            }),
             prepareCodexResume: this.prepareAiVaultSessionResumeFn ?? undefined,
             selectedAccountHome,
             launchEnv: await resolveHostStructuredAgentLaunchEnvironment(input.agent, settings),
             workspaceCwd: workspaceCwd
           })
         : null
-    const adoptedHandle = adoption && transcriptImport
-      ? {
-          transport: definition.handleTransport,
-          agent: definition.agent,
-          nativeId: transcriptImport.handleNamesTranscript
-            ? adoption.transcriptPath
-            : resumeFrom!.providerSessionId
-        }
-      : null
-    if (reservation && (
-      !agentSessionExecutionLocationsEqual(reservation.location, location) ||
-      !adoptedHandle ||
-      !reservation.providerHandleChain[0] ||
-      agentSessionProviderHandleRoot(reservation.providerHandleChain[0].handle) !==
-        agentSessionProviderHandleRoot(adoptedHandle)
-    )) {
-      throw agentSessionRefusalError('agent_session_conflict', { reason: 'identityMismatch' })
-    }
     return {
       envelope: {
         sessionId: input.envelope.sessionId,
@@ -264,7 +276,7 @@ export abstract class OrcaRuntimeWithGetStructuredAgentSessionCreateSupport exte
       location,
       provider: input.agent,
       agent: input.agent,
-      accountHome: reservation?.accountHome ?? (adoption ? adoption.accountHome : selectedAccountHome),
+      accountHome: adoption ? adoption.accountHome : selectedAccountHome,
       ...(options ? { options } : {}),
       ...(input.resumeFrom && adoption
         ? {
@@ -272,7 +284,13 @@ export abstract class OrcaRuntimeWithGetStructuredAgentSessionCreateSupport exte
             // `providerHandle` alone must not: `agentSession.ensure` already passes one today
             // without adopting anything.
             adopt: {
-              providerHandle: reservation?.providerHandleChain[0].handle ?? adoptedHandle!,
+              providerHandle: {
+                transport: definition.handleTransport,
+                agent: definition.agent,
+                nativeId: transcriptImport!.handleNamesTranscript
+                  ? adoption.transcriptPath
+                  : input.resumeFrom.providerSessionId
+              },
               transcriptPath: adoption.transcriptPath,
               source: {
                 providerSessionId: input.resumeFrom.providerSessionId,

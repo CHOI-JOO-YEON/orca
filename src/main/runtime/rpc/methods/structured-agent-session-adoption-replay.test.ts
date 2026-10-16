@@ -1,3 +1,5 @@
+import type { AgentProcessVerdict } from '../../../../shared/agent-process-presence'
+import { AGENT_SESSION_CREATE_MESSAGE_RUNTIME_CAPABILITY } from '../../../../shared/agent-session-create-capabilities'
 import '../unused-default-rpc-methods.test-fixture'
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -146,6 +148,7 @@ describe('committed adopting create RPC replay', () => {
 
     let selectedHome = originalHome
     const selectAccountHome = vi.fn(() => selectedHome)
+    let writerVerdict: AgentProcessVerdict = 'live'
     const runtime = new OrcaRuntimeService(
       {
         getSettings: () => ({
@@ -153,7 +156,11 @@ describe('committed adopting create RPC replay', () => {
         })
       } as never,
       undefined,
-      { prepareCodexStructuredLaunch: selectAccountHome }
+      { prepareCodexStructuredLaunch: selectAccountHome,
+        readHookCliWriterObservation: () => ({
+          current: () => true, topology: 'pane-owned', presence: async () => writerVerdict
+        })
+      }
     )
     const sourceRow = {
       paneKey: 'source-pane', worktreeId: WORKSPACE, agentType: 'codex',
@@ -212,6 +219,29 @@ describe('committed adopting create RPC replay', () => {
       runtime,
       methods: STRUCTURED_AGENT_SESSION_METHODS
     })
+    const historyFields = {
+      worktree: `id:${WORKSPACE}`, agent: 'codex' as const,
+      resumeFrom: { providerSessionId: THREAD }
+    }
+    const historyParams = {
+      ...historyFields,
+      envelope: { ...createParams().envelope,
+        payloadFingerprint: computeAgentSessionPayloadFingerprint({
+          method: 'agentSession.create', sessionId: SESSION, fields: historyFields
+        })
+      }
+    }
+    for (const capabilities of [CLIENT.clientCapabilities,
+      [...CLIENT.clientCapabilities, AGENT_SESSION_CREATE_MESSAGE_RUNTIME_CAPABILITY]]) {
+      expect(await call(dispatcher, historyParams, { ...CLIENT, clientCapabilities: capabilities }, unary))
+        .toMatchObject({ ok: true, result: { ok: false, refusal: {
+          code: 'agent_session_conflict', details: { reason: 'conversationHeldElsewhere' },
+          createAttemptRefusedBeforeCommit: true
+        } } })
+      expect(store.getRecord(SESSION)).toBeFalsy()
+      expect(sessionAdapter.acquire).not.toHaveBeenCalled()
+    }
+    writerVerdict = 'exited'
     const params = createParams()
 
     rows = unary ? [] : [{ ...sourceRow, providerSession: { ...sourceRow.providerSession, id: 'replaced' } }]
@@ -281,7 +311,7 @@ describe('committed adopting create RPC replay', () => {
         }
       }
     })
-    expect(sessionAdapter.acquire).not.toHaveBeenCalled()
+    expect(sessionAdapter.acquire).toHaveBeenCalledTimes(1)
     expect(internal.publishStructuredAgentSessionTab).toHaveBeenCalledTimes(2)
     expect(selectAccountHome).toHaveBeenCalledTimes(1)
     expect(await call(dispatcher, createParams(OPERATION, 'another-chat'))).toMatchObject({
@@ -300,7 +330,7 @@ describe('committed adopting create RPC replay', () => {
       ok: true,
       result: { ok: false, refusal: { code: 'agent_session_identity_required' } }
     })
-    expect(sessionAdapter.acquire).not.toHaveBeenCalled()
+    expect(sessionAdapter.acquire).toHaveBeenCalledTimes(1)
     expect(internal.publishStructuredAgentSessionTab).toHaveBeenCalledTimes(2)
   })
 })

@@ -2,15 +2,8 @@ import { useSyncExternalStore } from 'react'
 import { useAppStore } from '@/store'
 import { newAgentLaunchRequestId } from '@/lib/agent-launch-request-id'
 import { adoptAgentSessionLaunchVerdict } from '@/lib/agent-session-launch-plan'
-import {
-  beginStructuredAgentSessionProvisionalLaunch,
-  openStructuredAgentSessionProvisionalTab
-} from '@/lib/structured-agent-session-provisional-tab'
-import { StructuredAgentSessionCreateRefusalError } from '@/lib/structured-agent-session-launch-errors'
-import {
-  supportsStructuredAgentSessionCliSource,
-  supportsStructuredAgentSessionCliSourceStop
-} from '@/runtime/structured-agent-session-client'
+import { beginStructuredAgentSessionProvisionalLaunch } from '@/lib/structured-agent-session-provisional-tab'
+import { supportsStructuredAgentSessionCliSource } from '@/runtime/structured-agent-session-client'
 import { structuredAgentSessionTargetForHost } from '@/runtime/structured-agent-session-owner'
 import { waitForPromiseWithSignal } from '../../../../shared/abort-signal-reason'
 import { CLI_CONVERSATION_ADOPTING_AGENTS } from '../../../../shared/structured-agent-cli-conversation-adoption'
@@ -41,8 +34,7 @@ export function useCliChatResumePending(source: CliChatResumeSource | null): boo
 
 export async function runCliChatResume(
   source: CliChatResumeSource,
-  openOwner = false,
-  stopRunningAgent = false
+  openOwner = false
 ): Promise<void> {
   const key = keyFor(source)
   if (pending.has(key)) {
@@ -104,16 +96,10 @@ export async function runCliChatResume(
     return true
   }
   try {
-    const [cliSourceSupported, stopSupported] = await waitForPromiseWithSignal(
-      Promise.all([
-        supportsStructuredAgentSessionCliSource(target),
-        supportsStructuredAgentSessionCliSourceStop(target)
-      ]),
+    const cliSourceSupported = await waitForPromiseWithSignal(
+      supportsStructuredAgentSessionCliSource(target),
       controller.signal
     )
-    if (stopRunningAgent && !stopSupported) {
-      throw new Error('Exit the agent in the terminal first, then resume this conversation in chat.')
-    }
     if (!isCurrent()) {
       return
     }
@@ -126,13 +112,7 @@ export async function runCliChatResume(
       resumeFrom: {
         providerSessionId: source.providerSessionId,
         ...(cliSourceSupported
-          ? {
-              cliSource: {
-                workspaceId: source.workspaceId,
-                paneKey: source.paneKey,
-                ...(stopRunningAgent && stopSupported ? { stopRunningAgent: true } : {})
-              }
-            }
+          ? { cliSource: { workspaceId: source.workspaceId, paneKey: source.paneKey } }
           : {})
       }
     })
@@ -145,20 +125,6 @@ export async function runCliChatResume(
       return
     }
     const result = await waitForPromiseWithSignal(launch.settlement, controller.signal)
-    if (
-      result.kind === 'failed' &&
-      result.error instanceof StructuredAgentSessionCreateRefusalError &&
-      result.error.refusal?.details?.reason === 'terminalStopUnconfirmed' &&
-      launch.sessionId !== null
-    ) {
-      openStructuredAgentSessionProvisionalTab({
-        worktreeId: source.workspaceId,
-        executionHostId: source.executionHostId,
-        sessionId: launch.sessionId,
-        agent: CLI_CONVERSATION_ADOPTING_AGENTS[source.agent]
-      })
-      return
-    }
     if (result.kind === 'failed' && !result.notified && pending.get(key) === controller) {
       await reportCliChatResumeFailure(source, result.error, openOwner, target)
     }

@@ -120,8 +120,7 @@ export const ResumeSource = z
     cliSource: z
       .object({
         workspaceId: Identifier('Invalid workspace id'),
-        paneKey: Identifier('Invalid pane key'),
-        stopRunningAgent: z.boolean().optional()
+        paneKey: Identifier('Invalid pane key')
       })
       .strict()
       .optional()

@@ -38,7 +38,6 @@ export type PreparedStructuredAgentSessionCreate = {
   tab: { workspaceId: string; agent: StructuredAgentId } | null
   /** Absent for older clients and provider-dependent in-process callers. */
   atRest?: { firstMessage?: StructuredAgentSessionFirstMessage }
-  resumeFrom?: StructuredAgentSessionResumeSource
 }
 
 /** New creates keep the immutable client intent in the ledger; legacy creates keep attach identity. */
@@ -137,7 +136,6 @@ export async function prepareStructuredAgentSessionCreateForWorktree(args: {
   } = resolved
   return {
     host,
-    ...(args.resumeFrom ? { resumeFrom: args.resumeFrom } : {}),
     ...(hostLaunchDirectory ? { hostLaunchDirectory } : {}),
     attachParams: {
       ...resolvedAttach,
@@ -172,18 +170,9 @@ export async function commitStructuredAgentSessionCreate(args: {
 }): Promise<AgentSessionMutationResult<AgentSessionAttachResult>> {
   const { prepared } = args
   const tab = prepared.tab
-  if (prepared.atRest || prepared.resumeFrom?.cliSource) {
+  if (prepared.atRest) {
     return prepared.host.create(args.caller, prepared.attachParams, {
       ...prepared.atRest,
-      ...(prepared.resumeFrom?.cliSource
-        ? {
-            cliSourceStop: {
-              host: args.runtime.cliSourceStopHost(),
-              resumeFrom: prepared.resumeFrom,
-              workspaceId: prepared.attachParams.location.workspaceId
-            }
-          }
-        : {}),
       ...(prepared.hostLaunchDirectory
         ? { hostLaunchDirectory: prepared.hostLaunchDirectory }
         : {}),

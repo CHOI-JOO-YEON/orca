@@ -71,14 +71,12 @@ export function createStructuredAgentSessionTabSurface(
     deps: {
       store: Pick<
         AgentSessionRecordStore,
-        'getVisibleSessionTabIndex' | 'getSessionTabId' | 'showSessionTabs' | 'getRecord' | 'founding'
+        'getVisibleSessionTabIndex' | 'getSessionTabId' | 'showSessionTabs' | 'getRecord'
       >
     }
   },
   sessions: TabSessions,
-  forgetStatus: (sessionId: string) => void,
-  serializeClose: <T>(sessionId: string, task: () => Promise<T>) => Promise<T>,
-  journalUnimported: (sessionId: string) => Promise<boolean>
+  forgetStatus: (sessionId: string) => void
 ) {
   // Restored chats that could not be opened. Each keeps its tab, whose read says why.
   const unopened = new Set<string>()
@@ -108,29 +106,7 @@ export function createStructuredAgentSessionTabSurface(
       /** A close that may still put the tab back sends the hidden notice once it settles. */
       options?: { deferHiddenNotice?: boolean }
     ): Promise<void> => {
-      await (visible
-        ? setStructuredAgentSessionTabVisibility(host, sessionId, true, tabId)
-        : serializeClose(sessionId, async () => {
-          const reservedTabId = host.deps.store.getSessionTabId(sessionId)
-          const record = host.deps.store.getRecord(sessionId)
-          const canAbandon = Boolean(
-            reservedTabId && record?.adoptionSurvivors !== undefined &&
-            !sessions.has(sessionId) && await journalUnimported(sessionId).catch(() => false)
-          )
-          const abandoned = reservedTabId && canAbandon
-            ? await host.deps.store.founding.abandonUnlaunchedAdoptionReservation(
-                sessionId, reservedTabId, true
-              ).catch((error: unknown) => {
-                host.deps.logger.warn('abandoning an unlaunched chat failed', {
-                  scope: 'tab-close-adoption-abandon', sessionId, error
-                })
-                return false
-              })
-            : false
-          if (!abandoned) {
-            await setStructuredAgentSessionTabVisibility(host, sessionId, false, tabId)
-          }
-        }))
+      await setStructuredAgentSessionTabVisibility(host, sessionId, visible, tabId)
       if (!visible) {
         unopened.delete(sessionId)
         if (!options?.deferHiddenNotice) {

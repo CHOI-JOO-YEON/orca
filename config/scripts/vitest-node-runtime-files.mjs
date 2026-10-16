@@ -2,6 +2,7 @@ import { SQLITE_RUNTIME_INCLUDE } from './vitest-sqlite-runtime-files.mjs'
 
 // SQLite publication, native bindings, worker IPC, socket liveness, and V8 retention use Node.
 export const NODE_RUNTIME_INCLUDE = [
+  'src/main/runtime/structured-agent-cli-writers.test.ts',
   'config/scripts/vitest-sqlite-runtime-boundary.test.ts',
   'config/scripts/cloud-security-history-workflow.test.mjs',
   'config/scripts/skill-recipe-shell.test.mjs',
@@ -80,7 +81,6 @@ export const NODE_RUNTIME_INCLUDE = [
   'src/renderer/src/store/github/cache-persistence.test.ts',
   'src/main/native-chat/agent-session-journal/**/*.test.ts',
   'src/main/native-chat/agent-session-wire/structured-agent-session-status-feed.test.ts',
-  'src/main/native-chat/agent-session-wire/structured-agent-session-cli-handoff.test.ts',
   'src/main/native-chat/agent-session-wire/structured-agent-session-status-feed-conversation-name.test.ts',
   'src/main/native-chat/agent-session-wire/structured-agent-session-status-first-input-identity.test.ts',
   'src/main/native-chat/agent-session-wire/structured-agent-session-outgrown-child.test.ts',

@@ -57,51 +57,11 @@ export function structuredAgentCliSourcePath(input: {
   workspaceId: string
   rows: readonly AgentStatusIpcPayload[]
 }): string | undefined {
-  if (!input.resumeFrom.cliSource) {
-    return undefined
-  }
-  const row = findStructuredAgentCliSourceRow(input)
-  const path = row.providerSession?.transcriptPath?.trim()
-  if (
-    path &&
-    (isWslUncPath(path) || needsWslHostResolution(path) || parseSshTranscriptPath(path))
-  ) {
-    throw agentSessionRefusalError('structured_agent_session_unsupported', {
-      reason: 'hostUnsupported'
-    })
-  }
-  return path || undefined
-}
-
-/** The host's row for the pane the client named; a client path is never accepted. */
-export function findStructuredAgentCliSourceRow(input: {
-  agent: StructuredAgentId
-  resumeFrom: StructuredAgentSessionResumeSource
-  workspaceId: string
-  rows: readonly AgentStatusIpcPayload[]
-}): AgentStatusIpcPayload {
-  const row = matchStructuredAgentCliSourceRow(input)
-  if (!row) {
-    throw agentSessionRefusalError(
-      'agent_session_identity_required',
-      { reason: 'transcriptUnreadable' },
-      'The source conversation is no longer available.'
-    )
-  }
-  return row
-}
-
-export function matchStructuredAgentCliSourceRow(input: {
-  agent: StructuredAgentId
-  resumeFrom: StructuredAgentSessionResumeSource
-  workspaceId: string
-  rows: readonly AgentStatusIpcPayload[]
-}): AgentStatusIpcPayload | undefined {
   const source = input.resumeFrom.cliSource
   if (!source) {
     return undefined
   }
-  return input.rows.find(
+  const row = input.rows.find(
     (candidate) =>
       source.workspaceId === input.workspaceId &&
       candidate.worktreeId === source.workspaceId &&
@@ -112,4 +72,21 @@ export function matchStructuredAgentCliSourceRow(input: {
       CLI_CONVERSATION_ADOPTING_AGENTS[candidate.agentType] === input.agent &&
       candidate.providerSession?.id === input.resumeFrom.providerSessionId
   )
+  if (!row) {
+    throw agentSessionRefusalError(
+      'agent_session_identity_required',
+      { reason: 'transcriptUnreadable' },
+      'The source conversation is no longer available.'
+    )
+  }
+  const path = row.providerSession?.transcriptPath?.trim()
+  if (
+    path &&
+    (isWslUncPath(path) || needsWslHostResolution(path) || parseSshTranscriptPath(path))
+  ) {
+    throw agentSessionRefusalError('structured_agent_session_unsupported', {
+      reason: 'hostUnsupported'
+    })
+  }
+  return path || undefined
 }

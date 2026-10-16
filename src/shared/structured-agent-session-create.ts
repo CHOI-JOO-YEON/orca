@@ -19,7 +19,7 @@ export type StructuredAgentSessionResumeSource = {
   /** claude: the session id. codex: the thread id. */
   providerSessionId: string
   /** Host-owned pane evidence; send only with the CLI-source create capability. */
-  cliSource?: { workspaceId: string; paneKey: string; stopRunningAgent?: boolean }
+  cliSource?: { workspaceId: string; paneKey: string }
 }
 
 export type StructuredAgentSessionCreateParams = {

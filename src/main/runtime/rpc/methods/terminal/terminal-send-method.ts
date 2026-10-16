@@ -1,7 +1,4 @@
-import {
-  assertLegacyAiVaultResumeCommandAllowed,
-  withLegacyResumeCommandAdmission
-} from '../../../../ai-vault/structured-session-ownership'
+import { assertLegacyAiVaultResumeCommandAllowed } from '../../../../ai-vault/structured-session-ownership'
 import { InvalidArgumentError, defineMethod } from '../../core'
 import { isTerminalQueryReply } from '../../../../../shared/terminal-query-reply'
 import { isUntypedTerminalInput } from '../../../../../shared/terminal-untyped-input'
@@ -39,13 +36,16 @@ export const TERMINAL_SEND_METHODS = [
         markMutationEffectPossible,
         replayedMutationReceipt
       }
-    ) => withLegacyResumeCommandAdmission(
-      [params.text, params.resolvedLaunchDraft?.text].filter(Boolean).join('\n'),
-      async () => {
+    ) => {
       await assertTerminalSendTextWithinLimit(params.text)
       await assertTerminalSendTextWithinLimit(params.resolvedLaunchDraft?.text)
-      for (const text of [params.text, params.resolvedLaunchDraft?.text]) {
-        await assertLegacyAiVaultResumeCommandAllowed(text ?? '', () =>
+      if (params.text) {
+        await assertLegacyAiVaultResumeCommandAllowed(params.text, () =>
+          runtime.ensureStructuredAgentSessionHost()
+        )
+      }
+      if (params.resolvedLaunchDraft?.text) {
+        await assertLegacyAiVaultResumeCommandAllowed(params.resolvedLaunchDraft.text, () =>
           runtime.ensureStructuredAgentSessionHost()
         )
       }
@@ -302,7 +302,6 @@ export const TERMINAL_SEND_METHODS = [
       }
       // Why: deliberate mobile input takes the floor (drives `* → mobile{clientId}`); clientless sends fall back to the current mobile driver.
       return { send: result }
-      }
-    )
+    }
   })
 ]

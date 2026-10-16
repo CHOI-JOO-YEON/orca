@@ -114,7 +114,6 @@ export const AGENT_SESSION_REFUSAL_REASONS = {
     'identityMismatch',
     'sessionExists',
     'conversationHeldElsewhere',
-    'terminalStopUnconfirmed',
     'tabIdTaken'
   ],
   execution_owner_reconciling: ['hostReconciling', 'recordUnreadable'],

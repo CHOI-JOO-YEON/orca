@@ -17,10 +17,7 @@ import { SESSION_TAB_MARKDOWN_METHODS } from './session-tab-markdown-methods'
 import { SESSION_TAB_MUTATION_METHODS } from './session-tab-mutation-methods'
 import { createSessionTabsRetirementProofDelta } from './session-tabs-retirement-proof-delta'
 import { restoreStructuredTabsIfSupported } from './structured-session-tab-restore'
-import {
-  assertLegacyAiVaultResumeCommandAllowed,
-  withLegacyResumeCommandAdmission
-} from '../../../ai-vault/structured-session-ownership'
+import { assertLegacyAiVaultResumeCommandAllowed } from '../../../ai-vault/structured-session-ownership'
 import { SessionTabsUnsubscribeAllParams } from '../../../../shared/rpc-contract/session-tabs-params'
 import { SESSION_TABS_SPLIT_GROUP_PLACEMENT_RUNTIME_CAPABILITY } from '../../../../shared/protocol-version'
 import { createSessionTabsTabDeltaEncoder } from '../../../../shared/session-tabs-tab-delta'
@@ -58,47 +55,45 @@ export const SESSION_TAB_METHODS = [
     params: CreateTerminalTab,
     handler: async (params, context) => {
       const { runtime, signal, clientKind, pairedDeviceId, clientCapabilities } = context
-      return withLegacyResumeCommandAdmission(params.command, async () => {
-        if (params.command) {
-          await assertLegacyAiVaultResumeCommandAllowed(params.command, () =>
-            runtime.ensureStructuredAgentSessionHost()
-          )
-        }
-        return runtime.createMobileSessionTerminal(params.worktree, {
-          terminalImageViewerSupported: terminalImageViewerSupported(context),
-          afterTabId: params.afterTabId,
-          targetGroupId: params.targetGroupId,
-          command: params.command,
-          cwd: params.cwd,
-          ...(params.env ? { env: params.env } : {}),
-          ...(params.envToDelete ? { envToDelete: params.envToDelete } : {}),
-          startupCommandDelivery: params.startupCommandDelivery,
-          agent: params.agent,
-          ...(params.agentPrompt !== undefined ? { agentPrompt: params.agentPrompt } : {}),
-          ...(params.launchConfig ? { launchConfig: params.launchConfig } : {}),
-          ...(params.launchToken ? { launchToken: params.launchToken } : {}),
-          ...(params.launchAgent ? { launchAgent: params.launchAgent } : {}),
-          ...(params.viewMode ? { viewMode: params.viewMode } : {}),
-          activate: params.activate,
-          select: params.select,
-          clientNavigationId: pairedDeviceId,
-          navigation: resolveRuntimeNavigationTarget({
-            navigation: params.navigation,
-            clientKind
-          }),
-          clientMutationId: params.clientMutationId,
-          ...(pairedDeviceId
-            ? {
-                supportsSplitGroupPlacement:
-                  clientCapabilities?.includes(
-                    SESSION_TABS_SPLIT_GROUP_PLACEMENT_RUNTIME_CAPABILITY
-                  ) === true
-              }
-            : {}),
-          // Why: a dead client connection must cancel the surface wait instead
-          // of running down the timeout and rolling back a live tab (#7718).
-          signal
-        })
+      if (params.command) {
+        await assertLegacyAiVaultResumeCommandAllowed(params.command, () =>
+          runtime.ensureStructuredAgentSessionHost()
+        )
+      }
+      return runtime.createMobileSessionTerminal(params.worktree, {
+        terminalImageViewerSupported: terminalImageViewerSupported(context),
+        afterTabId: params.afterTabId,
+        targetGroupId: params.targetGroupId,
+        command: params.command,
+        cwd: params.cwd,
+        ...(params.env ? { env: params.env } : {}),
+        ...(params.envToDelete ? { envToDelete: params.envToDelete } : {}),
+        startupCommandDelivery: params.startupCommandDelivery,
+        agent: params.agent,
+        ...(params.agentPrompt !== undefined ? { agentPrompt: params.agentPrompt } : {}),
+        ...(params.launchConfig ? { launchConfig: params.launchConfig } : {}),
+        ...(params.launchToken ? { launchToken: params.launchToken } : {}),
+        ...(params.launchAgent ? { launchAgent: params.launchAgent } : {}),
+        ...(params.viewMode ? { viewMode: params.viewMode } : {}),
+        activate: params.activate,
+        select: params.select,
+        clientNavigationId: pairedDeviceId,
+        navigation: resolveRuntimeNavigationTarget({
+          navigation: params.navigation,
+          clientKind
+        }),
+        clientMutationId: params.clientMutationId,
+        ...(pairedDeviceId
+          ? {
+              supportsSplitGroupPlacement:
+                clientCapabilities?.includes(
+                  SESSION_TABS_SPLIT_GROUP_PLACEMENT_RUNTIME_CAPABILITY
+                ) === true
+            }
+          : {}),
+        // Why: a dead client connection must cancel the surface wait instead
+        // of running down the timeout and rolling back a live tab (#7718).
+        signal
       })
     }
   }),

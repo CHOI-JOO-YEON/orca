@@ -49,10 +49,7 @@ vi.mock('./tab-session-history-switch', async (importOriginal) => ({
   resolveTabSessionHistorySubject: () => mocks.subject
 }))
 
-vi.mock('./cli-chat-resume-source', () => ({
-  resolveCliChatResumeSource: () => mocks.cliSource,
-  cliChatResumeNeedsConfirmation: () => false
-}))
+vi.mock('./cli-chat-resume-source', () => ({ resolveCliChatResumeSource: () => mocks.cliSource }))
 vi.mock('./cli-chat-resume-run', () => ({
   runCliChatResume: mocks.runCliChatResume,
   useCliChatResumePending: () => false
@@ -137,9 +134,9 @@ describe('TabSessionSurfaceSwitchMenuItems', () => {
     }
     mocks.cliSource = source
     renderItemsNow()
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Switch to Chat (closes terminal)' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Resume in New Native Chat' }))
     await act(async () => {})
-    expect(mocks.runCliChatResume).toHaveBeenCalledWith(source, false, true)
+    expect(mocks.runCliChatResume).toHaveBeenCalledWith(source)
     expect(mocks.listSessions).not.toHaveBeenCalled()
   })
 })

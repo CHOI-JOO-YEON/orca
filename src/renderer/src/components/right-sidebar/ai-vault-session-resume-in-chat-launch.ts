@@ -13,6 +13,7 @@ import { adoptAgentSessionLaunchVerdict } from '@/lib/agent-session-launch-plan'
 import type { AgentLaunchRequestId } from '@/lib/agent-launch-request-id'
 import { activateAndRevealWorkspace } from '@/lib/worktree-activation'
 import { beginStructuredAgentSessionProvisionalLaunch } from '@/lib/structured-agent-session-provisional-tab'
+import { cliConversationExitGuidance } from '@/lib/cli-conversation-exit-guidance'
 import { structuredLaunchFailure } from '@/lib/structured-agent-session-launch-failure'
 
 export function activateAiVaultResumeWorkspace(workspaceId: string): boolean {
@@ -69,16 +70,18 @@ function notifyAiVaultSessionResumeInChatFailure(
   error: unknown,
   rowAgent: CliConversationRowAgent
 ): void {
-  if (hasRuntimeRpcErrorCode(error, 'agent_session_conflict')) {
+  const failure = structuredLaunchFailure(error)
+  if (hasRuntimeRpcErrorCode(error, 'agent_session_conflict') || failure?.code === 'agent_session_conflict') {
     toast.error(
-      translate(
-        'auto.components.right.sidebar.AiVaultPanel.resumeInChatConflict',
-        'Another chat is already holding this conversation.'
-      )
+      failure?.details?.reason === 'conversationHeldElsewhere' && !failure.details.owner
+        ? cliConversationExitGuidance(rowAgent)
+        : translate(
+            'auto.components.right.sidebar.AiVaultPanel.resumeInChatConflict',
+            'Another chat is already holding this conversation.'
+          )
     )
     return
   }
-  const failure = structuredLaunchFailure(error)
   if (
     failure?.code === 'agent_session_identity_required' &&
     failure.details?.reason === 'transcriptNotFound'

@@ -104,6 +104,7 @@ describe('resumeAiVaultSessionInNewChat', () => {
 
   it.each([
     ['agent_session_conflict', undefined, 'Another chat is already holding this conversation.'],
+    ['agent_session_conflict', 'conversationHeldElsewhere', 'Exit Codex in the terminal, then open this conversation from Session History.'],
     [
       'agent_session_identity_required',
       'transcriptNotFound',
