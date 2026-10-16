@@ -20,6 +20,7 @@ export class MobileNativeChatPageMotion {
   /** Where the page's own writes put the scroller, until their scroll event arrives. */
   private own: number[] = []
   private timer: ReturnType<typeof setTimeout> | undefined
+  private later: ReturnType<typeof setTimeout> | undefined
   private waiters: (() => void)[] = []
 
   constructor(private readonly onSettled: () => void) {}
@@ -134,7 +135,14 @@ export class MobileNativeChatPageMotion {
     }, wait)
   }
 
+  /** Checks for owed work again after `ms`, when nothing else will. */
+  pokeIn(ms: number): void {
+    clearTimeout(this.later)
+    this.later = setTimeout(() => this.poke(), ms)
+  }
+
   release(): void {
+    clearTimeout(this.later)
     clearTimeout(this.timer)
     this.timer = undefined
     this.waiters.splice(0).forEach((resolve) => resolve())

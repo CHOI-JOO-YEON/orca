@@ -3,6 +3,17 @@ import type { MobileNativeChatTurnRow } from './use-mobile-native-chat-turn-disc
 
 const FIRST_ESTIMATE = 80
 
+/** The drawn rows, as the measuring choice reads them. */
+type DrawnRows = {
+  keys: readonly string[]
+  rows: readonly NativeChatMessage[]
+  rowState: (index: number, row: NativeChatMessage) => MobileNativeChatTurnRow
+  start: number
+  /** The first row in the document: rows above it were never measured. */
+  first: number
+  following: boolean
+}
+
 type Entry = { px: number; row: NativeChatMessage; state: MobileNativeChatTurnRow; layout: string }
 
 function sameState(a: MobileNativeChatTurnRow, b: MobileNativeChatTurnRow): boolean {
@@ -79,12 +90,7 @@ export class MobileNativeChatPageHeights {
   /** The run of rows nearest above `start` whose heights don't hold, `[from, to]`, at most `rows`
    *  long and within `reach` px of measured rows above the window; null when there is none. */
   nearestStale(
-    drawn: {
-      keys: readonly string[]
-      rows: readonly NativeChatMessage[]
-      rowState: (index: number, row: NativeChatMessage) => MobileNativeChatTurnRow
-      start: number
-    },
+    drawn: Pick<DrawnRows, 'keys' | 'rows' | 'rowState' | 'start'>,
     layout: string,
     reach: number,
     rows: number
@@ -104,6 +110,25 @@ export class MobileNativeChatPageHeights {
       from -= 1
     }
     return [from, to]
+  }
+
+  /** The rows to measure next: stale ones within `near` px above the window; following, then the
+   *  rows never drawn just above the measured run; then, with `full`, stale ones anywhere above. */
+  next(
+    drawn: DrawnRows,
+    layout: string,
+    near: number,
+    rows: number,
+    full: boolean
+  ): [number, number] | null {
+    const close = this.nearestStale(drawn, layout, near, rows)
+    if (close || !drawn.following) {
+      return close
+    }
+    if (drawn.first > 0) {
+      return [Math.max(0, drawn.first - rows), drawn.first - 1]
+    }
+    return full ? this.nearestStale(drawn, layout, Infinity, rows) : null
   }
 
   clear(): void {

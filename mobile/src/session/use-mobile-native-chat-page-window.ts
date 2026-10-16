@@ -80,7 +80,6 @@ export function useMobileNativeChatPageWindow(args: {
   const width = useRef(0)
   const viewport = useRef(globalThis.innerHeight || 800)
   const lastScan = useRef(0)
-  const rescan = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const onSettled = useRef(() => {})
   const [motion] = useState(() => new MobileNativeChatPageMotion(() => onSettled.current()))
   const keys = useMemo(() => rows.map(rowKeys.keyOf), [rows, rowKeys.keyOf])
@@ -198,21 +197,18 @@ export function useMobileNativeChatPageWindow(args: {
     if (!at || !cur || at.keys.length === 0) {
       return
     }
-    // Stale rows near the reader; following, then the rows not yet drawn just above the measured run,
-    // then now and then stale rows anywhere above (a walk of every measured row).
     const layout = `${at.layoutKey}:${width.current}`
-    let run = heights.nearestStale(at, layout, MEASURE_REACH * viewport.current, MEASURE_ROWS)
-    run ??=
-      at.following && at.first > 0 ? [Math.max(0, at.first - MEASURE_ROWS), at.first - 1] : null
+    // A drawn group is measured before paint; choosing again first would take it down unmeasured.
+    if (cur.measure && heights.px(cur.measure.to) === undefined) {
+      return
+    }
     const since = Date.now() - lastScan.current
-    if (!run && at.following && at.first === 0 && since >= STALE_SCAN_MS) {
+    const full = at.following && at.first === 0 && since >= STALE_SCAN_MS
+    const run = heights.next(at, layout, MEASURE_REACH * viewport.current, MEASURE_ROWS, full)
+    if (full) {
       lastScan.current = Date.now()
-      run = heights.nearestStale(at, layout, Infinity, MEASURE_ROWS)
     } else if (!run && at.following && at.first === 0) {
-      rescan.current ??= setTimeout(() => {
-        rescan.current = undefined
-        motion.poke()
-      }, STALE_SCAN_MS - since)
+      motion.pokeIn(STALE_SCAN_MS - since)
     }
     const measure: Group | null = run && {
       from: at.keys[run[0]]!,
@@ -220,7 +216,7 @@ export function useMobileNativeChatPageWindow(args: {
       to: at.keys[run[1]]!,
       toAt: run[1]
     }
-    if (measure || cur.slack > 0 || cur.measure) {
+    if (measure?.from !== cur.measure?.from || measure?.to !== cur.measure?.to || cur.slack > 0) {
       w.current = { ...cur, measure }
       settle.current = true
       render()
@@ -273,7 +269,6 @@ export function useMobileNativeChatPageWindow(args: {
     return () => {
       detach()
       s.removeEventListener('scroll', scrolled)
-      clearTimeout(rescan.current)
       motion.release()
     }
   }, [scroller, motion, takeAnchor, cover, drawnRows])
