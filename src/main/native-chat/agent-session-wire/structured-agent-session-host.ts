@@ -30,8 +30,7 @@ import {
 import { flushStructuredAgentSessionHost } from './structured-agent-session-host-teardown'
 import type {
   StructuredAgentSessionCaller,
-  StructuredAgentSessionHostDeps,
-  StructuredAgentSessionReveal
+  StructuredAgentSessionHostDeps
 } from './structured-agent-session-host-types'
 import { StructuredAgentSessionEventRecovery } from './structured-agent-session-event-recovery'
 import { StructuredAgentSessionBackgroundTaskChannel } from './structured-agent-session-background-task-channel'
@@ -46,6 +45,8 @@ import * as conversation from './structured-agent-session-host-delivery'
 import { wireStructuredAgentSessionQueuedMessages as wireQueuedMessages } from './structured-agent-session-queued-wiring'
 import * as sessionLogger from './structured-agent-session-logger'
 export type { StructuredAgentSessionHostDeps } from './structured-agent-session-host-types'
+
+const disposeAll = (...all: { dispose: () => void }[]) => all.forEach((d) => d.dispose())
 
 export class StructuredAgentSessionHost {
   private readonly conversationCommands = new StructuredConversationCommandController(
@@ -244,7 +245,7 @@ export class StructuredAgentSessionHost {
   restoreReadableSessions = (ids?: readonly string[]) => this.restore.restoreReadableSessions(ids)
 
   /** Make one persisted session addressable again; see `structured-agent-session-reveal`. */
-  revealSession = (sessionId: string): Promise<StructuredAgentSessionReveal> =>
+  revealSession = (sessionId: string) =>
     reveal.revealStructuredAgentSession(this.deps, sessionId, this.lifetime.conversation)
 
   private serialize = this.tasks.serialize.bind(this.tasks)
@@ -260,10 +261,8 @@ export class StructuredAgentSessionHost {
   // type, and this file has no line budget left for the import.
   /** Quit: no exit or recovery settled after this starts a child or hands a message over, and the
    *  queue hands no card over. */
-  stopDelivery = (): void =>
-    [this.conversationDelivery, this.queued.drain, this.restore.reconciliation].forEach((d) =>
-      d.dispose()
-    )
+  stopDelivery = () =>
+    disposeAll(this.conversationDelivery, this.queued.drain, this.restore.reconciliation)
 
   async flushAllStreamedEvents(options?: { trigger?: 'quit' | 'update' }): Promise<void> {
     this.stopDelivery()
@@ -339,6 +338,8 @@ export class StructuredAgentSessionHost {
 
   /** The host's projection of a held chat's current work (`structuredAgentSessionCurrentWork`). */
   currentWork = this.clientDelivery.readCurrentWork
+  readCurrentRequests: StructuredAgentSessionBackgroundTaskChannel['currentRequests'] = (read) =>
+    this.backgroundTasks.currentRequests(read)
 
   subscribe = (input: AgentSessionSubscribeInput) => this.backgroundTasks.subscribe(input)
 

@@ -59,6 +59,9 @@ export type JournalRowWriterDeps = {
   inTransaction?: JournalRowTransactionHook
   /** After any rollback, so a cache filled inside the transaction cannot outlive it. */
   rolledBack?: () => void
+  /** Rows an OS crash may lose without losing anything but streamed text; they commit without
+   *  the per-commit fsync (`isJournalStreamedTextRevision`). */
+  streamedTextRevision?: (row: JournalRow) => boolean
 }
 
 const BOOKKEEPING_SAVEPOINT = 'journal_row_bookkeeping'
@@ -79,12 +82,15 @@ export class JournalRowWriter {
       assertJournalFence(row.fence, this.deps.highestFence())
       try {
         // One INSERT: the chat's epoch pointer moves only when the epoch does.
-        this.deps.database().transaction((db) => {
-          insertJournalRow(db, this.deps.sessionId, row, savedAt)
-          hook?.(db, row)
-          receipt?.write(db, row)
-          this.runBookkeeping(db, row)
-        }, options)
+        this.deps.database().transaction(
+          (db) => {
+            insertJournalRow(db, this.deps.sessionId, row, savedAt)
+            hook?.(db, row)
+            receipt?.write(db, row)
+            this.runBookkeeping(db, row)
+          },
+          { ...options, streamed: !hook && !receipt && this.streamed([row]) }
+        )
       } catch (error) {
         this.deps.rolledBack?.()
         throw error
@@ -128,13 +134,16 @@ export class JournalRowWriter {
       assertJournalFence(row.fence, this.deps.highestFence())
     }
     try {
-      this.deps.database().transaction((db) => {
-        for (const row of rows) {
-          insertJournalRow(db, this.deps.sessionId, row, ts)
-          this.runBookkeeping(db, row)
-        }
-        receipt?.write(db, receiptRow?.(rows))
-      }, options)
+      this.deps.database().transaction(
+        (db) => {
+          for (const row of rows) {
+            insertJournalRow(db, this.deps.sessionId, row, ts)
+            this.runBookkeeping(db, row)
+          }
+          receipt?.write(db, receiptRow?.(rows))
+        },
+        { ...options, streamed: !receipt && this.streamed(rows) }
+      )
     } catch (error) {
       this.deps.rolledBack?.()
       throw error
@@ -156,6 +165,11 @@ export class JournalRowWriter {
       epoch: row.epoch,
       sequence: row.seq
     }))
+  }
+
+  private streamed(rows: readonly JournalRow[]): boolean {
+    const { streamedTextRevision } = this.deps
+    return streamedTextRevision !== undefined && rows.every((row) => streamedTextRevision(row))
   }
 
   private runBookkeeping(db: Database.Database, row: JournalRow): void {
