@@ -9,11 +9,11 @@ import { coverMobileNativeChatWindow } from './mobile-native-chat-page-window-co
 import { useMobileNativeChatPageRender } from './use-mobile-native-chat-page-render'
 
 /** Rows measured in one settled moment: few enough not to drop a frame. */
-const MEASURE_ROWS = 24
+const MEASURE_ROWS = 12
 /** A parked reader's unmeasured rows are measured only within this many screens above them. */
 const MEASURE_REACH = 3
-/** Without anything else owed, rows that may have changed are checked at most this often. */
-const STALE_SCAN_MS = 200
+/** While following, every measured row is checked for a change at most this often. */
+const STALE_SCAN_MS = 1_000
 
 type Box = { top: number; bottom: number }
 type Measured = { getBoundingClientRect: () => Box }
@@ -199,18 +199,23 @@ export function useMobileNativeChatPageWindow(args: {
     if (!at || !cur || at.keys.length === 0) {
       return
     }
-    const unmeasured = at.first > 0 || cur.measure !== null
+    // Stale rows near the reader; following, then the rows not yet drawn just above the measured run,
+    // then now and then stale rows anywhere above (a walk of every measured row).
+    const layout = `${at.layoutKey}:${width.current}`
+    let run = heights.nearestStale(at, layout, MEASURE_REACH * viewport.current, MEASURE_ROWS)
+    if (!run && at.following && at.first > 0) {
+      run = [Math.max(0, at.first - MEASURE_ROWS), at.first - 1]
+    }
     const since = Date.now() - lastScan.current
-    if (!unmeasured && cur.slack === 0 && since < STALE_SCAN_MS) {
+    if (!run && at.following && at.first === 0 && since >= STALE_SCAN_MS) {
+      lastScan.current = Date.now()
+      run = heights.nearestStale(at, layout, Infinity, MEASURE_ROWS)
+    } else if (!run && at.following && at.first === 0) {
       rescan.current ??= setTimeout(() => {
         rescan.current = undefined
         motion.poke()
       }, STALE_SCAN_MS - since)
-      return
     }
-    lastScan.current = Date.now()
-    const reach = at.following ? Infinity : MEASURE_REACH * viewport.current
-    const run = heights.nearestStale(at, `${at.layoutKey}:${width.current}`, reach, MEASURE_ROWS)
     const measure: Group | null = run && {
       from: at.keys[run[0]]!,
       fromAt: run[0],
