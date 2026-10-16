@@ -2,6 +2,12 @@
 const REST_MS = 150
 type Moved = { by: 'own' | 'layout' | 'reader' | 'none'; moved: number }
 
+/** WebKit (every iOS browser, and Safari) stops a fling on any scroll write; other engines carry on. */
+function scrollWritesStopMomentum(): boolean {
+  const agent = globalThis.navigator?.userAgent ?? ''
+  return /AppleWebKit/.test(agent) && !/Chrome|Chromium|Android/.test(agent)
+}
+
 type Listened = {
   addEventListener: (type: string, listener: () => void, options: { passive: true }) => void
   removeEventListener: (type: string, listener: () => void) => void
@@ -122,6 +128,10 @@ export class MobileNativeChatPageMotion {
   settled(): boolean {
     return !this.touching && Date.now() - this.lastReaderScroll >= REST_MS
   }
+
+  /** A place correction may be written now: at once where a write keeps momentum (as the common
+   *  list does), else only at rest. */
+  readonly mayCorrect = scrollWritesStopMomentum() ? () => this.settled() : () => true
 
   /** Resolves once settled, or when the window goes away (`release`), so a wait never strands. */
   whenSettled(): Promise<void> {

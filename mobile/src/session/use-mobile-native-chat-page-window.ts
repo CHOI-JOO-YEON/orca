@@ -275,8 +275,9 @@ export function useMobileNativeChatPageWindow(args: {
     }
   }, [scroller, motion, takeAnchor, cover, drawnRows])
 
-  /** The one observer's entries: rows measured, then, for a settled parked reader, whatever moved the
-   *  row they were reading goes back (a measured row, the header, given-back space). */
+  /** The one observer's entries: rows measured, then, for a parked reader (on WebKit at rest),
+   *  whatever moved the row they were reading goes back (a measured row, the header, given-back
+   *  space). */
   const afterResize = useCallback(
     (entries: readonly ResizeObserverEntry[], pin: () => void) => {
       const [s, at] = [scroller(), drawn.current]
@@ -294,8 +295,8 @@ export function useMobileNativeChatPageWindow(args: {
           heights.remember(key, entry.contentRect.height, row, at.rowState(i, row), layout)
         }
       }
-      // Settled as of the layout, before a move no scroll event has reported yet is counted.
-      const shift = !at.following && motion.settled() ? drawnRows.placeShift(s) : null
+      // As of the layout, before a move no scroll event has reported yet is counted.
+      const shift = !at.following && motion.mayCorrect() ? drawnRows.placeShift(s) : null
       const max = s.scrollHeight - s.clientHeight
       const { by, moved } = motion.reconciled(s.scrollTop, max)
       if (shift !== null) {
@@ -313,12 +314,12 @@ export function useMobileNativeChatPageWindow(args: {
     [scroller, heights, motion, write, cover, drawnRows, takeAnchor]
   )
 
-  /** The place-hold's correction: written only while settled. Mid-motion the reader already saw the
-   *  move, and putting it back at rest would be a second jump. */
+  /** The place-hold's correction, when one may be written: on WebKit only at rest (mid-motion the
+   *  reader already saw the move, and putting it back at rest would be a second jump). */
   const keepInPlace = useCallback(
     (drift: number) => {
       const s = scroller()
-      if (s && !drawn.current?.following && motion.settled()) {
+      if (s && !drawn.current?.following && motion.mayCorrect()) {
         write(s, s.scrollTop + drift)
         anchorStale.current = true
       }
