@@ -292,14 +292,20 @@ export function useMobileNativeChatPageWindow(args: {
           heights.remember(key, entry.contentRect.height, row, at.rowState(i, row), layout)
         }
       }
-      const drift = !at.following && motion.settled() ? drawnRows.anchorDrift(s) : null
-      if (drift !== null) {
-        write(s, s.scrollTop + drift)
+      // Settled as of the layout, before a move no scroll event has reported yet is counted.
+      const shift = !at.following && motion.settled() ? drawnRows.placeShift(s) : null
+      const max = s.scrollHeight - s.clientHeight
+      const { by, moved } = motion.reconciled(s.scrollTop, max)
+      if (shift !== null) {
+        // Rows above moved by `shift`: put that back, keep the reader's own move, undo a clamp.
+        write(s, s.scrollTop - (by === 'layout' ? moved : 0) + shift)
+      }
+      if (by === 'reader') {
+        readerMoved.current?.(moved, max - s.scrollTop)
       }
       // The place is where the reader is now: a correction that couldn't land, or a move while
       // they scrolled, is not owed later.
       takeAnchor(s)
-      motion.reconciled(s.scrollTop, s.scrollHeight - s.clientHeight)
       cover(s)
       motion.poke()
     },

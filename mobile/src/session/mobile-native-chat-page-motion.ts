@@ -1,5 +1,7 @@
 /** No touch and no scroll of the reader's for this long: a write any sooner can stop iOS momentum. */
 const REST_MS = 150
+type Moved = { by: 'own' | 'layout' | 'reader' | 'none'; moved: number }
+
 type Listened = {
   addEventListener: (type: string, listener: () => void, options: { passive: true }) => void
   removeEventListener: (type: string, listener: () => void) => void
@@ -66,32 +68,40 @@ export class MobileNativeChatPageMotion {
     })
   }
 
-  reconciled(scrollTop: number, max: number): void {
+  /** The resize callback reconciled layout: what moved the scroll since the page last accounted
+   *  for it is now told apart (a scroll event may not have reported it yet). */
+  reconciled(scrollTop: number, max: number): Moved {
     this.unreconciled = false
-    ;[this.seen, this.seenMax] = [scrollTop, max]
+    return this.account(scrollTop, max)
   }
 
-  /** What moved the scroll to `scrollTop` since the page last accounted for it, and by how much. Not
-   *  the reader when the page's write, an unreconciled commit, rows above the reading place
-   *  (`placeMoved`) or a clamp to a shorter end explains it; a finger on the list makes it theirs. */
-  scrolled(
-    scrollTop: number,
-    max: number,
-    placeMoved: () => boolean
-  ): { by: 'own' | 'layout' | 'reader' | 'none'; moved: number } {
-    const [from, fromMax, moved] = [this.seen, this.seenMax, scrollTop - this.seen]
-    ;[this.seen, this.seenMax] = [scrollTop, max]
+  /** What moved the scroll to `scrollTop` since the page last accounted for it, and by how much. The
+   *  page's write; layout while a commit is unreconciled or rows above the reading place moved
+   *  (`placeMoved`), left for the resize callback to tell apart; else as `account`. */
+  scrolled(scrollTop: number, max: number, placeMoved: () => boolean): Moved {
+    const moved = scrollTop - this.seen
     const at = this.own.findIndex((target) => Math.abs(target - scrollTop) <= 1)
     if (at !== -1) {
       this.own.splice(0, at + 1)
+      ;[this.seen, this.seenMax] = [scrollTop, max]
       return { by: 'own', moved }
     }
+    if (Math.abs(moved) >= 0.5 && !this.touching && (this.unreconciled || placeMoved())) {
+      return { by: 'layout', moved }
+    }
+    return this.account(scrollTop, max)
+  }
+
+  /** A clamp onto a shorter end is layout's; any other move is the reader's (a finger makes it so). */
+  private account(scrollTop: number, max: number): Moved {
+    const [from, fromMax, moved] = [this.seen, this.seenMax, scrollTop - this.seen]
+    ;[this.seen, this.seenMax] = [scrollTop, max]
     if (Math.abs(moved) < 0.5) {
       return { by: 'none', moved }
     }
     // Pulled back onto a shorter end from where the old one allowed; iOS bouncing past an end is not.
     const clamped = Math.abs(scrollTop - max) < 0.5 && from > max + 0.5 && from <= fromMax + 0.5
-    if (!this.touching && (this.unreconciled || clamped || placeMoved())) {
+    if (clamped && !this.touching) {
       return { by: 'layout', moved }
     }
     this.lastReaderScroll = Date.now()

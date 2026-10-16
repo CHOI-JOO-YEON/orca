@@ -68,22 +68,19 @@ export class MobileNativeChatPageRows {
     this.anchor = key && top !== undefined ? { key, top, scrollTop: scroller.scrollTop } : null
   }
 
-  /** How far the anchored row has moved since it was taken; null when it isn't drawn. */
-  anchorDrift(scroller: Scroller): number | null {
-    const node = this.node(this.anchor?.key)
-    return this.anchor && node
-      ? node.getBoundingClientRect().top - scroller.getBoundingClientRect().top - this.anchor.top
-      : null
-  }
-
-  /** The anchored row moved in the content since it was taken: rows above it changed. */
-  placeMoved(scroller: Scroller): boolean {
+  /** How far the anchored row moved in the content since it was taken (rows above it changed size),
+   *  apart from any scrolling; null when it isn't drawn. */
+  placeShift(scroller: Scroller): number | null {
     const node = this.node(this.anchor?.key)
     if (!this.anchor || !node) {
-      return false
+      return null
     }
     const now = node.getBoundingClientRect().top - scroller.getBoundingClientRect().top
-    return Math.abs(now + scroller.scrollTop - this.anchor.top - this.anchor.scrollTop) >= 0.5
+    return now + scroller.scrollTop - this.anchor.top - this.anchor.scrollTop
+  }
+
+  placeMoved(scroller: Scroller): boolean {
+    return Math.abs(this.placeShift(scroller) ?? 0) >= 0.5
   }
 
   forgetAnchor(): void {
