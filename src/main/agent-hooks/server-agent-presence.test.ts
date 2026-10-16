@@ -135,7 +135,7 @@ describe('host-owned hook presence', () => {
     const inspect = () => assertCliConversationWritersExited({ rows: () => server.getStatusSnapshot(),
       observation: (value) => server.readCliWriterObservation(value), pane: () => ({ ptyId: 'pty', identity: incarnation }),
       sleeping: () => false, shellAlone }, 'opencode', 'open-code-conversation')
-    await expect(inspect()).rejects.toMatchObject({ code: 'agent_session_conflict' })
+    await expect(inspect()).rejects.toMatchObject({ refusal: { code: 'agent_session_conflict' } })
     const interrupt = () => {
       const value = row()
       expect(server.inferInterrupt({ paneKey: PANE, baselineUpdatedAt: value.receivedAt,
@@ -153,7 +153,9 @@ describe('host-owned hook presence', () => {
     await expect(inspect()).resolves.toBeUndefined()
     const binding = row().providerSession
     expect(binding && OPEN_CODE_WRITER_TOPOLOGY in binding).toBe(true)
-    const event = { ...row(), payload: { state: 'done' as const, prompt: '', agentType: 'opencode2' } }
+    const snapshot = row()
+    const event = { ...snapshot, restoredUnconfirmed: snapshot.restoredUnconfirmed ? true as const : undefined,
+      payload: { state: 'done' as const, prompt: '', agentType: 'opencode2' } }
     for (const value of [event, toAgentStatusIpcPayload(event), buildRelayHookEnvelope(event, 'opencode2')]) {
       expect(JSON.stringify(value)).not.toContain('pane-owned')
       expect(Object.getOwnPropertySymbols(structuredClone(value).providerSession ?? {})).toEqual([])
@@ -174,7 +176,7 @@ describe('host-owned hook presence', () => {
     expect(observation()?.topology).toBe('unverifiable')
     repaint()
     expect(observation()?.topology).toBe('unverifiable')
-    await expect(inspect()).rejects.toMatchObject({ code: 'agent_session_conflict' })
+    await expect(inspect()).rejects.toMatchObject({ refusal: { code: 'agent_session_conflict' } })
   })
 
   it('clears the status on SessionEnd while the terminal survives, without a renderer', async () => {
