@@ -14,6 +14,7 @@ import { StructuredAgentSessionHost } from '../../../native-chat/agent-session-w
 import { setStructuredAgentSessionHost } from '../../../native-chat/agent-session-wire/structured-agent-session-registry'
 import { OrcaRuntimeService } from '../../orca-runtime'
 import type { RpcRequest, RpcResponse } from '../core'
+import type { RpcDispatchStreamingOptions } from '../dispatcher-stream-options'
 import { RpcDispatcher } from '../dispatcher'
 import { STRUCTURED_AGENT_SESSION_METHODS } from './structured-agent-session'
 import { openTestJournalHostDatabase } from '../../../native-chat/agent-session-journal/journal-host-database-test-support'
@@ -84,7 +85,12 @@ function createParams(operationId = OPERATION, sessionId = SESSION) {
   }
 }
 
-async function call(dispatcher: RpcDispatcher, params: unknown, client = CLIENT, unary = false) {
+async function call(
+  dispatcher: RpcDispatcher,
+  params: unknown,
+  client: RpcDispatchStreamingOptions = CLIENT,
+  unary = false
+) {
   const replies: RpcResponse[] = []
   const request: RpcRequest = {
     id: `request-${replies.length + 1}`,

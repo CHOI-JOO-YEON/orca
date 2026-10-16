@@ -1,4 +1,3 @@
-import type { RuntimeConstructionBindings } from '../construction/runtime-construction-dependencies'
 import { LOCAL_EXECUTION_HOST_ID } from '../../../shared/execution-host'
 import type { StructuredAgentId } from '../../../shared/agent-session-provider-handle'
 import type { AgentStatusIpcPayload } from '../../../shared/agent-status-types'
@@ -10,8 +9,6 @@ import {
 } from '../structured-agent-cli-writers'
 
 export abstract class OrcaRuntimeWithStructuredSessionCliWriterHost extends OrcaRuntimeWithGetWorktreePs {
-  protected readonly readHookCliWriterObservationFn!: RuntimeConstructionBindings['readHookCliWriterObservation'] | null
-
   protected cliWriterPane(row: AgentStatusIpcPayload): CliWriterPane | null {
     try {
       const pane = this.resolveTerminalPane(row.paneKey, row.worktreeId ?? '')

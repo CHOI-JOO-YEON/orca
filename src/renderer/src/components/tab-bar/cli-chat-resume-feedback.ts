@@ -19,7 +19,7 @@ export async function reportCliChatResumeFailure(
     refusal?.code === 'agent_session_conflict' ||
     refusal?.code === 'agent_session_ownership_unknown'
   ) {
-    const owner = refusal.details?.owner
+    const owner = refusal.owner
     if (openOwner && owner) {
       await activateAiVaultStructuredSession({ structuredSession: owner }, undefined, target)
       return

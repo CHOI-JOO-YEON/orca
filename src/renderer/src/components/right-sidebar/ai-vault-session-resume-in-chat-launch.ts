@@ -73,7 +73,7 @@ function notifyAiVaultSessionResumeInChatFailure(
   const failure = structuredLaunchFailure(error)
   if (hasRuntimeRpcErrorCode(error, 'agent_session_conflict') || failure?.code === 'agent_session_conflict') {
     toast.error(
-      failure?.details?.reason === 'conversationHeldElsewhere' && !failure.details.owner
+      failure?.details?.reason === 'conversationHeldElsewhere' && !failure.owner
         ? cliConversationExitGuidance(rowAgent)
         : translate(
             'auto.components.right.sidebar.AiVaultPanel.resumeInChatConflict',
