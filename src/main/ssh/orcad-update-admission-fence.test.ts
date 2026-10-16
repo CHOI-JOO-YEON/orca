@@ -51,6 +51,11 @@ describe('sshUpdateAdmissionFence (R32)', () => {
     await expect(hooks.recountCensus?.()).resolves.toEqual(idle)
   })
 
+  it('keeps a fenced server unverifiable when it could not settle its spawns', async () => {
+    const { hooks } = fence([{ ...unanswered, admissionClosedUntil: 1 }])
+    await expect(hooks.recountCensus?.()).resolves.toMatchObject({ liveSessions: null })
+  })
+
   it('reopens admission with a 0 fence', async () => {
     const { count, hooks } = fence([idle])
     await hooks.releaseIncumbentAdmission?.()

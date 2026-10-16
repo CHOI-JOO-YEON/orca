@@ -5,7 +5,17 @@ import {
   OrcadTerminalCensusParamsSchema,
   type OrcadTerminalCensus
 } from '../../../../shared/orcad-terminal-census'
-import { closeTerminalAdmission } from '../../terminal-admission-fence'
+import {
+  closeTerminalAdmission,
+  waitForTerminalSpawnsToSettle
+} from '../../terminal-admission-fence'
+
+const SPAWN_SETTLE_MS = 10_000
+const UNVERIFIABLE: OrcadTerminalCensus = {
+  liveSessions: null,
+  startedSinceActivation: null,
+  daemonProtocolVersion: null
+}
 
 type OrcadTerminalCensusParams = z.infer<typeof OrcadTerminalCensusParamsSchema>
 
@@ -16,12 +26,15 @@ export const ORCAD_TERMINAL_CENSUS_METHODS = [
     params: OrcadTerminalCensusParamsSchema,
     handler: async (params, { runtime }) => {
       // Before counting: a terminal admitted after the count would die with the stop unseen.
-      const admissionClosedUntil =
-        params.closeAdmissionForMs === undefined
-          ? undefined
-          : closeTerminalAdmission(params.closeAdmissionForMs)
-      const census = await countTerminals(params, runtime)
-      return admissionClosedUntil === undefined ? census : { ...census, admissionClosedUntil }
+      if (params.closeAdmissionForMs === undefined) {
+        return countTerminals(params, runtime)
+      }
+      const admissionClosedUntil = closeTerminalAdmission(params.closeAdmissionForMs)
+      // A spawn admitted before the fence may still be starting; count only once it has.
+      if (admissionClosedUntil > 0 && !(await waitForTerminalSpawnsToSettle(SPAWN_SETTLE_MS))) {
+        return { ...UNVERIFIABLE, admissionClosedUntil }
+      }
+      return { ...(await countTerminals(params, runtime)), admissionClosedUntil }
     }
   })
 ]

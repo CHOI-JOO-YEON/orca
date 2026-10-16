@@ -34,8 +34,11 @@ export function sshUpdateAdmissionFence(
         releaseFinishedAutomationTerminals: true,
         closeAdmissionForMs: ORCAD_UPDATE_ADMISSION_FENCE_MS
       })
-      // An unanswered recount keeps the pre-upload count: an SSH update defers no more than before.
-      return recount.liveSessions === null ? preUploadCensus : recount
+      // An unanswered or unfenced recount keeps the pre-upload count, so an SSH update defers no
+      // more than before; a fenced server that could not settle its spawns stays unverifiable.
+      return recount.liveSessions === null && recount.admissionClosedUntil === undefined
+        ? preUploadCensus
+        : recount
     },
     releaseIncumbentAdmission: async () => {
       await count({ closeAdmissionForMs: 0 })

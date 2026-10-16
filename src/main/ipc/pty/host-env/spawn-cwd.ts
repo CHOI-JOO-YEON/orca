@@ -38,6 +38,13 @@ export function assertWorkspaceAcceptsNewPty(
   return assertWorkspaceNotMoving(store, worktreeId, sessionId)
 }
 
+/** The update fence alone, rechecked where the spawn actually starts (see runAdmittedTerminalSpawn). */
+export function assertTerminalAdmissionOpen(sessionId: string | undefined): Promise<void> | void {
+  if (isTerminalAdmissionClosed()) {
+    return assertReattachesLiveSession(sessionId, () => new TerminalAdmissionClosedError())
+  }
+}
+
 function assertWorkspaceNotMoving(
   store: Store | undefined,
   worktreeId: string | undefined,
