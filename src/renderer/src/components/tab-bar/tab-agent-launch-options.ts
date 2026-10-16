@@ -138,15 +138,21 @@ export function findMatchingTabAgentLaunchOptions(
     return []
   }
   const compactQuery = compactAgentAlias(query)
-  return agents
-    .map((option, index) => ({
-      index,
-      option,
-      score: scoreAgentLaunchOption(normalizedQuery, compactQuery, option)
-    }))
-    .filter((entry) => entry.score > 0)
-    .sort((left, right) =>
-      left.score !== right.score ? right.score - left.score : left.index - right.index
-    )
-    .map((entry) => entry.option)
+  return (
+    agents
+      .map((option, index) => ({
+        index,
+        option,
+        score: scoreAgentLaunchOption(normalizedQuery, compactQuery, option)
+      }))
+      .filter((entry) => entry.score > 0)
+      // Why: the first match takes Enter, so a row that can't launch never outranks one that can.
+      .sort(
+        (left, right) =>
+          Number(Boolean(left.option.disabled)) - Number(Boolean(right.option.disabled)) ||
+          right.score - left.score ||
+          left.index - right.index
+      )
+      .map((entry) => entry.option)
+  )
 }

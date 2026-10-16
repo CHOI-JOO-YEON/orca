@@ -123,4 +123,6 @@ it('projects the same CLI label, unavailable reason and stable chat ID as static
     { id: 'chat:claude', label: 'Claude', reason: 'No chat over SSH', disabled: true },
     { id: 'cli:claude', label: 'Claude (CLI)', disabled: false }
   ])
+  // Typing the agent's name and pressing Enter launches its CLI, not the disabled chat.
+  expect(findMatchingTabAgentLaunchOptions('claude', unavailable)[0]?.id).toBe('cli:claude')
 })
