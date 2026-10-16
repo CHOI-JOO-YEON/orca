@@ -132,8 +132,8 @@ describe('host-owned hook presence', () => {
     expect(observation()?.topology).toBe('unverifiable')
     await post()
     const shellAlone = vi.fn(async () => false)
-    const inspect = () => assertCliConversationWritersExited({ rows: () => server.getStatusSnapshot(),
-      observation: (value) => server.readCliWriterObservation(value), pane: () => ({ ptyId: 'pty', identity: incarnation }),
+    const inspect = () => assertCliConversationWritersExited({ rows: () => server.getStatusSnapshot(), saved: () => [],
+      observation: (value) => server.readCliWriterObservation(value), pane: () => ({ ptyId: 'pty', incarnationId: incarnation, identity: incarnation }),
       sleeping: () => false, shellAlone }, 'opencode', 'open-code-conversation')
     await expect(inspect()).rejects.toMatchObject({ refusal: { code: 'agent_session_conflict' } })
     const interrupt = () => {

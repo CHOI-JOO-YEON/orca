@@ -245,6 +245,7 @@ export class TerminalHost {
     }
     return inspectTerminalHostProcess({
       sessionId,
+      currentSession: () => this.sessions.get(sessionId),
       session: session?.isAlive ? session : null,
       ...(options?.expectedIncarnationId
         ? { expectedIncarnationId: options.expectedIncarnationId }

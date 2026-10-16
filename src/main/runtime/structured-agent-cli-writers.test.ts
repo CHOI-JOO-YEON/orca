@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AgentStatusIpcPayload } from '../../shared/agent-status-types'
 import type { AgentProcessVerdict } from '../../shared/agent-process-presence'
 import type { CliWriterObservation } from '../agent-hooks/server/cli-writer-observation'
+import type { SleepingAgentSessionRecord } from '../../shared/agent-session-resume'
 import { assertCliConversationWritersExited, posixCliWriterShellAlone, type CliWriterHost } from './structured-agent-cli-writers'
 
 const snapshot = vi.hoisted(() => vi.fn())
@@ -19,8 +20,8 @@ function inspection(verdict: AgentProcessVerdict | null = null) {
     current: () => current, topology: 'pane-owned', presence: vi.fn(async () => verdict)
   }
   const host: CliWriterHost = {
-    rows: () => [row], observation: () => observation,
-    pane: () => ({ ptyId: 'pty', identity }), sleeping: () => false,
+    rows: () => [row], saved: () => [], observation: () => observation,
+    pane: () => ({ ptyId: 'pty', incarnationId: identity, identity }), sleeping: () => false,
     shellAlone: vi.fn(async () => true)
   }
   return {
@@ -92,5 +93,31 @@ describe('execution-host conversation writer inspection', () => {
       }
       await expect(check.run()).rejects.toMatchObject(refusal)
     }
+  })
+
+  it('requires current original-C shell proof for saved resumes, including done checkpoints', async () => {
+    const record: SleepingAgentSessionRecord = { paneKey: 'source', worktreeId: 'workspace',
+      agent: 'codex', providerSession: { key: 'session_id', id: 'conversation' },
+      prompt: '', state: 'done', origin: 'live', capturedAt: 1, updatedAt: 1 }
+    const check = inspection('exited')
+    let saved = [record]
+    check.host.saved = () => saved
+    check.host.rows = () => []
+    await expect(check.run()).rejects.toMatchObject(refusal)
+    check.host.rows = () => [{ ...row, providerSession: { key: 'session_id', id: 'other' } }]
+    await expect(check.run()).rejects.toMatchObject(refusal)
+    check.host.rows = () => [row]
+    await expect(check.run()).resolves.toBeUndefined()
+    expect(check.host.shellAlone).toHaveBeenCalledOnce()
+    check.host.shellAlone = async () => { saved = []; return true }
+    await expect(check.run()).rejects.toMatchObject(refusal)
+    saved = [record]
+    check.host.shellAlone = async () => { check.replacePty(); return true }
+    await expect(check.run()).rejects.toMatchObject(refusal)
+    const newlySaved = inspection()
+    newlySaved.host.saved = () => saved
+    saved = []
+    newlySaved.host.shellAlone = async () => { saved = [record]; return true }
+    await expect(newlySaved.run()).rejects.toMatchObject(refusal)
   })
 })

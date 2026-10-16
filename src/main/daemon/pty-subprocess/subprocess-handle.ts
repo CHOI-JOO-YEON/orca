@@ -71,7 +71,7 @@ export function createDaemonPtySubprocessHandle(args: {
     pid: proc.pid,
     processNameIsSpawnFile: ptyProcessNameIsSpawnFile(proc),
     ...(process.platform === 'win32'
-      ? { inspectChildProcesses: () => inspectSpawnFileWindowsChildProcesses(proc) }
+      ? { inspectChildProcesses: () => inspectSpawnFileWindowsChildProcesses(proc, args.shellPath) }
       : {}),
     shellPath: args.shellPath,
     shellCwd: args.spawnCwd,

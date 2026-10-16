@@ -9,10 +9,13 @@ import type { CliWriterObservation } from '../agent-hooks/server/cli-writer-obse
 import { getFreshShellForegroundSnapshot } from '../../shared/process-table-snapshot-reader'
 import { collectDescendantsFromIndex, getProcessTableIndex } from '../../shared/process-table-index'
 import { isShellProcess } from '../../shared/shell-process-detection'
+import type { PtyIncarnationId } from '../../shared/pty-incarnation'
+import { normalizeAgentProviderSession, type SleepingAgentSessionRecord } from '../../shared/agent-session-resume'
 
-export type CliWriterPane = { ptyId: string; identity: string }
+export type CliWriterPane = { ptyId: string; incarnationId: PtyIncarnationId; identity: string }
 export type CliWriterHost = {
   rows: () => AgentStatusIpcPayload[]
+  saved: () => SleepingAgentSessionRecord[]
   observation: (row: AgentStatusIpcPayload) => CliWriterObservation | null
   pane: (row: AgentStatusIpcPayload) => CliWriterPane | null
   sleeping: (workspaceId: string) => boolean
@@ -37,6 +40,11 @@ export async function assertCliConversationWritersExited(
   const refuse = () =>
     agentSessionRefusalError('agent_session_conflict', { reason: 'conversationHeldElsewhere' })
   try {
+    const savedCandidates = () => host.saved().filter((record) => adoptsCliConversations(record.agent) &&
+      CLI_CONVERSATION_ADOPTING_AGENTS[record.agent] === agent &&
+      normalizeAgentProviderSession(record.providerSession)?.id === providerSessionId)
+    const saved = savedCandidates()
+    const covered = new Map<SleepingAgentSessionRecord, () => boolean>()
     const rows = host.rows().filter(
       (row) => !row.connectionId && !row.structuredHost &&
         adoptsCliConversations(row.agentType) &&
@@ -44,6 +52,10 @@ export async function assertCliConversationWritersExited(
         row.providerSession?.id === providerSessionId
     )
     for (const row of rows) {
+      const matches = (record: SleepingAgentSessionRecord) => !record.connectionId && record.paneKey === row.paneKey &&
+        record.worktreeId === row.worktreeId && record.agent === row.agentType &&
+        record.providerSession.key === row.providerSession?.key && record.providerSession.id === row.providerSession?.id
+      const matching = saved.filter(matches)
       const observed = host.observation(row)
       if (!observed || !observed.current() || observed.topology !== 'pane-owned' ||
         host.sleeping(row.worktreeId ?? '')) {
@@ -52,16 +64,24 @@ export async function assertCliConversationWritersExited(
       const pane = host.pane(row)
       const presence = await observed.presence()
       if (!observed.current() || presence === 'live' || presence === 'unverifiable' ||
-        (pane && host.pane(row)?.identity !== pane.identity)) {
+        (pane && host.pane(row)?.identity !== pane.identity) || host.sleeping(row.worktreeId ?? '')) {
         throw refuse()
       }
-      if (presence === 'exited') {
+      if (presence === 'exited' && matching.length === 0) {
         continue
       }
       if (!pane || !(await host.shellAlone(pane)) || !observed.current() ||
-        host.pane(row)?.identity !== pane.identity || host.sleeping(row.worktreeId ?? '')) {
+        host.pane(row)?.identity !== pane.identity || host.sleeping(row.worktreeId ?? '') ||
+        matching.some((record) => !host.saved().includes(record) || !matches(record))) {
         throw refuse()
       }
+      for (const record of matching) {
+        covered.set(record, () => observed.current() && host.pane(row)?.identity === pane.identity &&
+          !host.sleeping(row.worktreeId ?? '') && matches(record) && host.saved().includes(record))
+      }
+    }
+    if ([...saved, ...savedCandidates()].some((record) => !covered.get(record)?.())) {
+      throw refuse()
     }
   } catch {
     throw refuse()
