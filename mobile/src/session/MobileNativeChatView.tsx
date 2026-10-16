@@ -326,6 +326,8 @@ export function MobileNativeChatView({
   ) : null
 
   const header = mobileNativeChatListHeader(hasMore, olderPages, loadEarlier)
+  // How rows draw: a change re-lays every row, which the place-hold and the window both follow.
+  const layoutKey = `${fontScale}:${toolsExpanded}`
   const pageHeader = (measuring: boolean) =>
     mobileNativeChatListHeader(hasMore, olderPages, loadEarlier, measuring)
   const footer = mobileNativeChatListFooter(liveStatus, turns.waitingRows, renderItem)
@@ -357,7 +359,7 @@ export function MobileNativeChatView({
         </View>
       ) : (
         <GestureHandlerRootView style={styles.listWrap}>
-          <MobileNativeChatScrollHold rowKeys={rowKeys} {...tail.placeHold} />
+          <MobileNativeChatScrollHold {...{ rowKeys, layoutKey, ...tail.placeHold }} />
           <GestureDetector gesture={pinchGesture}>
             {Platform.OS === 'web' ? (
               <MobileNativeChatPageList
@@ -366,8 +368,7 @@ export function MobileNativeChatView({
                 rowKeys={rowKeys}
                 renderItem={renderItem}
                 rowState={turns.resolveRow}
-                layoutKey={`${fontScale}:${toolsExpanded}`}
-                {...{ footer, emptyStateView, onScroll, header: pageHeader }}
+                {...{ footer, emptyStateView, onScroll, header: pageHeader, layoutKey }}
               />
             ) : (
               <FlatList

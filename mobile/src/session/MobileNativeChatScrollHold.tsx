@@ -19,6 +19,8 @@ type Unit = { key: string; top: number; member?: string; placed: string }
 
 type Props = {
   rowKeys: Pick<MobileNativeChatRowKeys, 'scope' | 'sourceHead' | 'current' | 'placement'>
+  /** How rows draw (tools shown, text size); a change regroups and re-lays them like a new source. */
+  layoutKey?: string
   /** Whether the reader follows the end, which then owns the scroll. */
   isFollowing: () => boolean
   /** On the page, the list makes the correction (`keepInPlace`) so none is written mid-scroll. */
@@ -120,7 +122,7 @@ function overscrolled({ scrollTop, scrollHeight, clientHeight }: Scroller): bool
 }
 
 /** Keeps a parked reader's place on the page when the source window changes above them (an older
- *  page, a cap trim): the first part of what they were reading that the update kept goes back where
+ *  page, a cap trim) or the rows regroup (Tools, text size): the first part of what they were reading that the update kept goes back where
  *  it was. A following reader is left to the follow owner, which holds the end. A class because
  *  only `getSnapshotBeforeUpdate` sees the rows before the update is in the document. A native list
  *  holds its own place (`maintainVisibleContentPosition`). */
@@ -130,7 +132,8 @@ export class MobileNativeChatScrollHold extends Component<Props> {
     if (
       Platform.OS !== 'web' ||
       previous.rowKeys.scope !== this.props.rowKeys.scope ||
-      previous.rowKeys.sourceHead === this.props.rowKeys.sourceHead ||
+      (previous.rowKeys.sourceHead === this.props.rowKeys.sourceHead &&
+        previous.layoutKey === this.props.layoutKey) ||
       this.props.isFollowing()
     ) {
       return null
