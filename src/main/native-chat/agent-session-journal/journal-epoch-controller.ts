@@ -2,6 +2,7 @@ import type {
   AgentJournalCursor,
   AgentSessionJournalIdentity
 } from '../../../shared/agent-session-journal-types'
+import type { JournalReducerState } from './journal-reducer'
 import type { JournalHostDatabase, JournalWriteOptions } from './journal-host-database'
 import { replaceJournalEpoch, type JournalReplacementItem } from './journal-epoch-replacement'
 import type { JournalQueuePauseRestatement } from './queued-message-pause'
@@ -21,6 +22,7 @@ export class JournalEpochController {
       database: () => JournalHostDatabase
       readOnly: () => boolean
       highestFence: () => number
+      state: () => JournalReducerState
       /** What of the live epoch's Stop and Resume a replacement restates. */
       queuePauseRestatement: () => JournalQueuePauseRestatement
       cursor: () => AgentJournalCursor
@@ -70,6 +72,7 @@ export class JournalEpochController {
         reason,
         fence,
         items,
+        previous: this.deps.state(),
         queuePause: this.deps.queuePauseRestatement(),
         now: this.deps.now,
         mintEpoch: this.deps.mintEpoch,

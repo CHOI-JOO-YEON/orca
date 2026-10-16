@@ -71,7 +71,8 @@ export async function createQueuedMessageTestRig(
   const root = await mkdtemp(join(tmpdir(), 'orca-queued-messages-'))
   resetHostTestOperationIds()
   let store = await openTestAgentSessionRecordStore(root)
-  const provider = createQueuedRigProvider({ getRecord: (id) => store.getRecord(id) }, options)
+  const records = { getRecord: (id: string) => store.getRecord(id) }
+  const provider = createQueuedRigProvider(records, options, () => host)
   const { dispatch, compact, cancelTurn, closeSession } = provider
   const makeHost = () =>
     new StructuredAgentSessionHost({
@@ -301,9 +302,7 @@ export async function createQueuedMessageTestRig(
       sessionId: SESSION,
       fence: store.getRecord(SESSION)!.lease.runtimeFence,
       acquisitionGeneration: 'generation-1',
-      reportedOptions: { model: 'default' },
-      restoreSkippedOptions: [],
-      optionRevision: host.collaboratorsForTests().runtimeState.optionRevisions.current(SESSION)
+      reportedOptions: { model: 'default' }
     })
   }
 

@@ -73,10 +73,11 @@ export function createStructuredAgentSessionHostRestore(
   deps: StructuredAgentSessionHostDeps,
   wiring: Omit<
     ConstructorParameters<typeof StructuredAgentSessionReadableRestorer>[0],
-    'openDeps' | 'reconcile' | 'resolveRecovery'
+    'openDeps' | 'reconcileAll' | 'reconcile' | 'resolveRecovery'
   > & {
+    /** One chat's leases, or with no id every chat's on this host (`createRestartReconciler`). */
     reconcileLeases: (
-      sessionId: string | null,
+      sessionId?: string,
       options?: JournalWriteOptions
     ) => Promise<AgentSessionWireRefusal | null>
     resolveRecovery: (sessionId: string, writes: BackgroundLeaseWrites) => Promise<unknown>
@@ -101,7 +102,11 @@ export function createStructuredAgentSessionHostRestore(
   // Startup's and a restored read's bookkeeping, which neither waits on: another connection's lock
   // fails it at once, and the retry's round tries it again.
   const reconcile = createReaderReconcile(
-    (sessionId) => reconcileLeases(sessionId, BACKGROUND_WRITE),
+    (sessionId: string) => reconcileLeases(sessionId, BACKGROUND_WRITE),
+    failures
+  )
+  const reconcileAll = createReaderReconcile(
+    () => reconcileLeases(undefined, BACKGROUND_WRITE),
     failures
   )
   const recoveryWrites = backgroundLeaseWrites(deps.store)
@@ -144,7 +149,7 @@ export function createStructuredAgentSessionHostRestore(
         latchedTargets().length > 0),
     reconcile: async (disposed) => {
       try {
-        const refusal = await reconcileLeases(null, BACKGROUND_WRITE)
+        const refusal = await reconcileLeases(undefined, BACKGROUND_WRITE)
         if (refusal) {
           failures.report(refusal)
           return 'failed'
@@ -170,6 +175,7 @@ export function createStructuredAgentSessionHostRestore(
   let startupSettled: Promise<void> = Promise.resolve()
   const restorer = new StructuredAgentSessionReadableRestorer({
     openDeps: deps,
+    reconcileAll,
     reconcile,
     // The next attach or send resolves recovery again, strictly, before it acts.
     resolveRecovery: (sessionId) =>
@@ -187,7 +193,7 @@ export function createStructuredAgentSessionHostRestore(
   const gate = new StructuredAgentSessionRestartRestoreGate()
   return {
     reconcileRestartLeases: async () => {
-      await reconcile('startup')
+      await reconcileAll()
       // Generation ends the reconcile committed are signalled already; a lock it met before it
       // could commit leaves the store-wide step owed, which this round runs.
       const candidates = structuredAgentSessionRecoveryCandidates(deps.store)
