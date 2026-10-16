@@ -7,7 +7,8 @@ import { directoryTranscriptImport } from '../native-chat/structured-agent-cli-c
 import { readPiSessionHeader } from './rpc-launch-resolution'
 
 export const PI_TRANSCRIPT_IMPORT = directoryTranscriptImport({
-  transcriptRoot: ({ accountHomePath }) => join(accountHomePath, 'sessions'),
+  // The same root findTranscript walks, so a custom or sessions-leaf PI_CODING_AGENT_DIR admits.
+  transcriptRoot: () => piSessionHistorySessionsDir(),
   // Session History's host source is authoritative, including when the chat chose another home.
   accountHomeCandidates: () => [
     process.env.PI_CODING_AGENT_DIR?.trim() || join(homedir(), '.pi', 'agent')
