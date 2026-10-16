@@ -297,7 +297,9 @@ export function useMobileNativeChatPageWindow(args: {
       // Settled as of the layout, before a move no scroll event has reported yet is counted.
       const shift = !at.following && motion.settled() ? drawnRows.placeShift(s) : null
       const max = s.scrollHeight - s.clientHeight
-      const { by, moved } = motion.reconciled(s.scrollTop, max)
+      // The row held its place on screen, so the browser's own scroll anchoring moved the scroll.
+      const held = shift !== null && drawnRows.placeHeld(s)
+      const { by, moved } = motion.reconciled(s.scrollTop, max, held)
       if (shift !== null) {
         // Rows above moved by `shift`: put that back, keep the reader's own move, undo a clamp.
         write(s, s.scrollTop - (by === 'layout' ? moved : 0) + shift)
