@@ -28,7 +28,9 @@ describe('TerminalHost process inspection', () => {
     const subprocess = createSubprocess()
     let exitDuringRead = false
     const inspectChildProcesses = vi.fn(async () => {
-      if (exitDuringRead) subprocess.kill()
+      if (exitDuringRead) {
+        subprocess.kill()
+      }
       return 'no-children' as const
     })
     const host = new TerminalHost({ spawnSubprocess: () => ({ ...subprocess,
