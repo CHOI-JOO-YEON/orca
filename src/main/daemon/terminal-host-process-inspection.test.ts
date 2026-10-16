@@ -28,7 +28,7 @@ describe('TerminalHost process inspection', () => {
     const subprocess = createSubprocess()
     const host = new TerminalHost({ spawnSubprocess: () => ({ ...subprocess,
       processNameIsSpawnFile: true, confirmForegroundProcess: async () => null,
-      inspectChildProcesses: async () => { subprocess.kill(); return 'no-children' } }) })
+      inspectChildProcesses: async () => { subprocess.kill(); return 'no-children' as const } }) })
     try {
       const created = await host.createOrAttach({ sessionId: 'exiting', cols: 80, rows: 24,
         streamClient: { onData: vi.fn(), onExit: vi.fn() } })
