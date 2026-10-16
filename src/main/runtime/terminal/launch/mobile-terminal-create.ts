@@ -19,6 +19,8 @@ export abstract class OrcaRuntimeWithCreateMobileSessionTerminal extends OrcaRun
     selector: string | undefined
   ): string | null
 
+  abstract getExplicitSessionWorktreeIdSelector(selector: string | undefined): string | null
+
   protected abstract getMobileSessionTabsForWorktree(
     worktreeId: string,
     clientNavigationId?: string
@@ -30,6 +32,7 @@ export abstract class OrcaRuntimeWithCreateMobileSessionTerminal extends OrcaRun
       afterTabId?: string
       targetGroupId?: string
       command?: string
+      shellOverride?: string
       cwd?: string
       env?: Record<string, string>
       envToDelete?: string[]
@@ -86,7 +89,7 @@ export abstract class OrcaRuntimeWithCreateMobileSessionTerminal extends OrcaRun
     }
     if (select) {
       const worktreeId =
-        this.getValidatedExplicitWorktreeIdSelector(worktreeSelector) ??
+        this.getExplicitSessionWorktreeIdSelector(worktreeSelector) ??
         (await this.resolveWorktreeSelector(worktreeSelector)).id
       this.applyMobileSessionTabNavigation(
         this.getMobileSessionTabsForWorktree(worktreeId),

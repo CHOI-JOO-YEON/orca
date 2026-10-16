@@ -70,7 +70,8 @@ export type SshTarget = {
    *  0 disables expiry. Default: 0 (until reset). Max: 604800 (7 days). */
   relayGracePeriodSeconds?: number
   /** Lets this host's `orca` CLI drive this desktop's Orca browser tabs in the host's own
-   *  workspaces (desktop browser bridge). Off by default: the host is a guest, not an owner. */
+   *  workspaces (desktop browser bridge) and its relay-era terminals' orchestration commands.
+   *  Off by default: the host is a guest, not an owner. */
   allowRemoteCliControl?: boolean
   /** Stamped when the switch is turned on with that meaning. A `true` without it was set while the
    *  switch did nothing (1.4.225 onward), so load turns it off and asks for a fresh opt-in. */
@@ -342,6 +343,8 @@ export type SshManagedServerStatus =
       canLeaveBehind?: true
       /** A move to the managed server stopped short and keeps the host locked until it resumes. */
       held?: true
+      /** COMPAT(legacy-relay-bridge): the connect stayed up so the bridge serves those terminals. */
+      bridged?: true
     }
 
 /** Plain SSH terminals and SFTP browsing only; `reason` is the ladder's classified cause. */
