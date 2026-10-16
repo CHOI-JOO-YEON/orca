@@ -1,5 +1,5 @@
 import { waitForPromiseWithSignal } from '../../../../shared/abort-signal-reason'
-import { useEffect, useMemo, useSyncExternalStore } from 'react'
+import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { STRUCTURED_AGENT_SESSION_REGISTERED_AGENTS_RUNTIME_CAPABILITY as CATALOG } from '../../../../shared/protocol-version'
 import { LOCAL_EXECUTION_HOST_ID, parseExecutionHostId } from '../../../../shared/execution-host'
@@ -154,11 +154,13 @@ export function useNewTabAgentMenuRows(
     !settings?.disabledTuiAgents?.includes(agent) &&
     isNativeChatProviderDisplayedOn(settings, agent, detection.detectedIds)
   const eligible =
-    isNativeChatEnabled(settings) && catalogLoaded && input.hostCapabilities !== null
+    isNativeChatEnabled(settings) && input.hostCapabilities !== null
       ? chatAgents
           .filter(
             (agent) =>
-              enabled(agent) && ['yes', 'not-yet-known'].includes(hostChatAnswer(inputFor(agent)))
+              enabled(agent) &&
+              detection.detectedIds?.includes(agent) !== false &&
+              ['yes', 'not-yet-known'].includes(hostChatAnswer(inputFor(agent)))
           )
           .join(',')
       : ''
@@ -167,6 +169,8 @@ export function useNewTabAgentMenuRows(
   const owner = useMemo(() => ({ ...facts, worktreeId, eligible }), [facts, worktreeId, eligible])
   const ownerKey = useMemo(() => JSON.stringify({ ...facts, worktreeId }), [facts, worktreeId])
   useSyncExternalStore(subscribeHostChatAnswers, hostChatAnswersVersion, hostChatAnswersVersion)
+  // Agents this open's reads gave up on; cleared with the reads so the next open asks again.
+  const [unanswered, setUnanswered] = useState<ReadonlySet<TuiAgent>>(new Set())
   const chatEnabled = isNativeChatEnabled(settings)
   useEffect(() => {
     if (!open || !chatEnabled) {
@@ -195,10 +199,12 @@ export function useNewTabAgentMenuRows(
     const controller = new AbortController()
     const agents = owner.eligible.split(',').filter(isTuiAgent)
     // Why: a slow host is not a refusal; the deadline only releases the reads.
+    const giveUp = (gaveUp: readonly TuiAgent[]) =>
+      setUnanswered((previous) => new Set([...previous, ...gaveUp]))
     const timer = setTimeout(() => {
       active = false
       controller.abort()
-      agents.forEach((agent) => recordHostChatAnswer(ownerKey, agent, 'unanswered'))
+      giveUp(agents)
     }, 10_000)
     for (const agent of agents) {
       void waitForPromiseWithSignal(
@@ -217,13 +223,11 @@ export function useNewTabAgentMenuRows(
           if (answered === agents.length) {
             clearTimeout(timer)
           }
-          recordHostChatAnswer(
-            ownerKey,
-            agent,
-            support.kind === 'admitted' || support.kind === 'declined'
-              ? answerFromSupport(support)
-              : 'unanswered'
-          )
+          if (support.kind === 'admitted' || support.kind === 'declined') {
+            recordHostChatAnswer(ownerKey, agent, answerFromSupport(support))
+          } else {
+            giveUp([agent])
+          }
         },
         () => undefined
       )
@@ -232,6 +236,7 @@ export function useNewTabAgentMenuRows(
       active = false
       clearTimeout(timer)
       controller.abort()
+      setUnanswered(new Set())
     }
   }, [owner, ownerKey, open, worktreeId])
   const asking = structuredAgentSessionTargetForHost(owner.executionHostId)
@@ -248,12 +253,14 @@ export function useNewTabAgentMenuRows(
         return preliminary
       }
       const recorded = readHostChatAnswer(ownerKey, agent)
-      if (recorded === undefined) {
-        // Why: a row stays quietly disabled while its host is asked, so it never flips under the pointer.
-        return open && asking.includes(agent) ? 'not-yet-known' : preliminary
+      if (recorded) {
+        return recorded
       }
+      // Why: a row stays quietly disabled while its host is asked, so it never flips under the pointer.
       // A host that could not answer leaves this client's facts; the click's admission owns a refusal.
-      return recorded === 'unanswered' ? preliminary : recorded
+      return open && asking.includes(agent) && !unanswered.has(agent)
+        ? 'not-yet-known'
+        : preliminary
     }
   }).map((row) => ({ ...row, executionHostId: parseExecutionHostId(facts.executionHostId)?.id }))
   return { rows, detection }
