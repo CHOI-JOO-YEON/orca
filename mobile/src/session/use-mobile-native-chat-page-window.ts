@@ -139,8 +139,7 @@ export function useMobileNativeChatPageWindow(args: {
       const max = s.scrollHeight - s.clientHeight
       const target = Math.max(0, Math.min(to, max))
       // iOS still bouncing past an end: a write then lands while WebKit owns the scroll.
-      const bouncing = s.scrollTop < 0 || s.scrollTop > max + 1
-      if (!bouncing && Math.abs(target - s.scrollTop) >= 0.5) {
+      if (s.scrollTop >= 0 && s.scrollTop <= max + 1 && Math.abs(target - s.scrollTop) >= 0.5) {
         motion.wrote(target)
         s.scrollTop = target
       }
@@ -203,9 +202,8 @@ export function useMobileNativeChatPageWindow(args: {
     // then now and then stale rows anywhere above (a walk of every measured row).
     const layout = `${at.layoutKey}:${width.current}`
     let run = heights.nearestStale(at, layout, MEASURE_REACH * viewport.current, MEASURE_ROWS)
-    if (!run && at.following && at.first > 0) {
-      run = [Math.max(0, at.first - MEASURE_ROWS), at.first - 1]
-    }
+    run ??=
+      at.following && at.first > 0 ? [Math.max(0, at.first - MEASURE_ROWS), at.first - 1] : null
     const since = Date.now() - lastScan.current
     if (!run && at.following && at.first === 0 && since >= STALE_SCAN_MS) {
       lastScan.current = Date.now()
