@@ -226,12 +226,12 @@ export function useHostWorktreeActions(args: {
   }, [hostId, leaveHost, forgetHostClient, setActionError, setConfirmRemoveHost])
 
   const navigateFromHostList = useCallback(
-    (target: string) => {
+    (target: string, selectPane = false) => {
       if (!embedded) {
         router.push(target)
         return
       }
-      if (pathname === (target.split('?')[0] ?? target)) {
+      if (!selectPane && pathname === (target.split('?')[0] ?? target)) {
         return
       }
       if (pathname === `/h/${hostId}`) {
@@ -244,7 +244,7 @@ export function useHostWorktreeActions(args: {
   )
 
   const openWorktreeSession = useCallback(
-    (item: Worktree) => {
+    (item: Worktree, paneKey?: string) => {
       const server = serverWorkspaces.hosts.find((host) => host.hostId === item.hostId)
       if (server?.relay === 'update-needed') {
         setServerNotice(serverUpdateNeededNotice(server.label))
@@ -269,8 +269,9 @@ export function useHostWorktreeActions(args: {
       // so an absent one builds `/h//session/...` — a pathname the shell's segment rule refuses —
       // rather than the string "undefined", which it would accept as a host named undefined.
       const executionHost = routeHost ? `&executionHost=${encodeURIComponent(routeHost)}` : ''
-      const target = `/h/${encodeURIComponent(hostId ?? '')}/session/${encodeURIComponent(item.worktreeId)}?name=${encodeURIComponent(item.displayName || item.repo)}${executionHost}`
-      navigateFromHostList(target)
+      const pane = paneKey ? `&paneKey=${encodeURIComponent(paneKey)}` : ''
+      const target = `/h/${encodeURIComponent(hostId ?? '')}/session/${encodeURIComponent(item.worktreeId)}?name=${encodeURIComponent(item.displayName || item.repo)}${executionHost}${pane}`
+      navigateFromHostList(target, Boolean(paneKey))
     },
     [
       client,

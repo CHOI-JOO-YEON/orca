@@ -1,4 +1,5 @@
 import { isFloatingWorkspaceId } from '../../../shared/floating-workspace-worktree'
+import { isAgentSessionCreateAdmissionRefusal } from '../../../shared/agent-session-definitive-refusal'
 import type { AgentJournalMessageItem } from '../../../shared/agent-session-journal-types'
 import { computeAgentSessionPayloadFingerprint } from '../../../shared/agent-session-mutation-envelope'
 import {
@@ -157,11 +158,9 @@ async function foundConversation(
     const { refusal } = prepared
     return {
       ok: false,
-      refusal:
-        refusal.code === 'agent_session_identity_required' &&
-        refusal.details?.reason === 'transcriptUnreadable'
-          ? { ...refusal, createAttemptRefusedBeforeCommit: true }
-          : refusal
+      refusal: isAgentSessionCreateAdmissionRefusal(refusal)
+        ? { ...refusal, createAttemptRefusedBeforeCommit: true }
+        : refusal
     }
   }
   const existing = context.sessions.get(sessionId)

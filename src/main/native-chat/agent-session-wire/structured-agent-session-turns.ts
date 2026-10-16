@@ -309,5 +309,6 @@ function requireSubmission(
   if (!submission) {
     throw new Error('agent_session_submission_lost')
   }
-  return submission
+  // The answer as of this step: the journal settles its own row in place afterwards.
+  return { ...submission }
 }

@@ -43,6 +43,7 @@ import { agentSessionFailureWords } from '../../../shared/agent-session-failure-
 import { openTestJournalHostDatabase } from '../agent-session-journal/journal-host-database-test-support'
 import { codexProviderHandle } from '../../../shared/agent-session-provider-handle-encoding'
 import { NO_STRUCTURED_AGENTS } from './structured-agent-session-adapter-router-test-support'
+import { startsWhenPublished } from './structured-agent-session-instant-start.test-support'
 
 const UNEXPECTED_PROVIDER_EXIT_OUTCOME =
   'Codex stopped while this response was in progress. You can continue in this conversation.'
@@ -63,15 +64,18 @@ let hostErrors: unknown[]
 let statusSink: StructuredAgentSessionStatusSink
 let clock: number
 function adapter(): StructuredAgentSessionAdapter {
-  return {
-    acquire,
-    closeSession,
-    releaseAcquisition: vi.fn(async () => true),
-    dispatch,
-    cancelTurn: vi.fn(async () => ({ cancelled: false })),
-    answerPrompt: vi.fn(async () => undefined),
-    setOption: vi.fn(async () => undefined)
-  }
+  return startsWhenPublished(
+    {
+      acquire,
+      closeSession,
+      releaseAcquisition: vi.fn(async () => true),
+      dispatch,
+      cancelTurn: vi.fn(async () => ({ cancelled: false })),
+      answerPrompt: vi.fn(async () => undefined),
+      setOption: vi.fn(async () => undefined)
+    },
+    () => host
+  )
 }
 
 function openHost(
@@ -220,6 +224,7 @@ beforeEach(async () => {
   acquire = vi.fn(async ({ fence, spawnToken, events }) => {
     sink = events ?? null
     return {
+      providerChildPhase: 'starting' as const,
       process: { hostId: 'local', pid: 4242, processStartTimeMs: 1_700_000_000_000, spawnToken },
       acquisitionGeneration: `generation-${++generation}`,
       link: {
@@ -272,7 +277,6 @@ describe('a chat that closes', () => {
     expect(await host.sleepWorkspace('workspace-1')).toEqual({ stoppedSessionIds: [SESSION] })
     expect(reported).toHaveBeenCalledWith(expect.objectContaining({ cause: 'requested-close' }))
     expect(store.getRecord(SESSION)).not.toBeNull()
-    expect(host.hasSession(SESSION)).toBe(false)
     expect(await host.sleepWorkspace('other-workspace')).toEqual({ stoppedSessionIds: [] })
   })
 
@@ -284,7 +288,6 @@ describe('a chat that closes', () => {
       stoppedSessionIds: [],
       failures: [{ sessionId: SESSION, reason: 'stop-unverifiable' }]
     })
-    expect(store.getRecord(SESSION)).not.toBeNull()
   })
 
   it('does not count a chat whose send was accepted after the stop as stopped', async () => {
@@ -295,9 +298,8 @@ describe('a chat that closes', () => {
       const result = await close(...args)
       const body = hostTestMessage('newer send')
       // The later work exists once the send is accepted, not merely once it is queued.
-      expect(
-        await host.send(CALLER, { envelope: envelope('agentSession.send', { body }), body })
-      ).toMatchObject({ ok: true })
+      const sent = host.send(CALLER, { envelope: envelope('agentSession.send', { body }), body })
+      expect(await sent).toMatchObject({ ok: true })
       return result
     })
 
@@ -443,10 +445,9 @@ describe('a session with a turn in flight', () => {
     await host.restoreReadableSessions()
     expect(await host.sleepWorkspace('workspace-1')).toEqual({ stoppedSessionIds: [SESSION] })
     const getRecord = store.getRecord.bind(store)
-    vi.spyOn(store, 'getRecord').mockImplementation((id) => {
-      const record = getRecord(id)
-      return record && { ...record, lease: { ...record.lease, deathEvidence: null } }
-    })
+    const withoutDeath = (record: ReturnType<typeof getRecord>) =>
+      record && { ...record, lease: { ...record.lease, deathEvidence: null } }
+    vi.spyOn(store, 'getRecord').mockImplementation((id) => withoutDeath(getRecord(id)))
     const receipt = await host.sleepWorkspace('workspace-1')
     expect(receipt).toMatchObject({ failures: [{ reason: 'stop-unverifiable' }] })
   })

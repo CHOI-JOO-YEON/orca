@@ -38,13 +38,14 @@ export function createStructuredAgentSessionHostMutationContext(
     openConversation: input.conversationDelivery.open,
     ensureAgent: (sessionId) =>
       agentStart.ensureStructuredAgentSessionAgentForOperation(input.attachContext(), sessionId),
+    startupAttempts: input.runtimeState.startupAttempts,
+    deliveryOrder: input.runtimeState.deliveryOrder,
     joinChildClose: (sessionId) =>
       agentStart.joinClosingStructuredAgentSessionChild(input.attachContext(), sessionId),
     wakeDelivery: (sessionId) => input.conversationDelivery.loop.wake(sessionId),
     stopAgent: (sessionId, ending) => input.lifetime.stopAgent(sessionId, ending),
     wakeQueuedDrain: (sessionId) => input.queued.drain.schedule(sessionId),
     acquireAborts: input.runtimeState.acquireAborts,
-    optionRevisions: input.runtimeState.optionRevisions,
     now: input.now
   }
 }
