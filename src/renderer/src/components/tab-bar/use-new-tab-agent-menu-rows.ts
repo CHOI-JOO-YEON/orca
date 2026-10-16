@@ -1,5 +1,5 @@
 import { waitForPromiseWithSignal } from '../../../../shared/abort-signal-reason'
-import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
+import { useEffect, useMemo, useSyncExternalStore } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { STRUCTURED_AGENT_SESSION_REGISTERED_AGENTS_RUNTIME_CAPABILITY as CATALOG } from '../../../../shared/protocol-version'
 import { LOCAL_EXECUTION_HOST_ID, parseExecutionHostId } from '../../../../shared/execution-host'
@@ -33,6 +33,12 @@ import {
 } from '@/runtime/local-runtime-capabilities'
 import { useDetectedAgents, type AgentDetectionTarget } from '@/hooks/useDetectedAgents'
 import { readDetectedAgentsForTarget } from '@/lib/agent-detection-target-inventory'
+import {
+  hostChatAnswersVersion,
+  readHostChatAnswer,
+  recordHostChatAnswer,
+  subscribeHostChatAnswers
+} from './new-tab-host-chat-answers'
 
 function hostChatAnswer(input: AgentLaunchRoutingInput): HostChatAnswer {
   const support = structuredAgentLaunchSupport(input)
@@ -159,10 +165,8 @@ export function useNewTabAgentMenuRows(
   // Only launch-affecting configuration retires display reads; unrelated settings do not.
   // Why not `open`: answers outlive the menu so a reopen shows them at once while they refresh.
   const owner = useMemo(() => ({ ...facts, worktreeId, eligible }), [facts, worktreeId, eligible])
-  const [answers, setAnswers] = useState<{
-    owner: typeof owner
-    values: Map<TuiAgent, HostChatAnswer>
-  } | null>(null)
+  const ownerKey = useMemo(() => JSON.stringify({ ...facts, worktreeId }), [facts, worktreeId])
+  useSyncExternalStore(subscribeHostChatAnswers, hostChatAnswersVersion, hostChatAnswersVersion)
   const chatEnabled = isNativeChatEnabled(settings)
   useEffect(() => {
     if (!open || !chatEnabled) {
@@ -194,6 +198,7 @@ export function useNewTabAgentMenuRows(
     const timer = setTimeout(() => {
       active = false
       controller.abort()
+      agents.forEach((agent) => recordHostChatAnswer(ownerKey, agent, 'unanswered'))
     }, 10_000)
     for (const agent of agents) {
       void waitForPromiseWithSignal(
@@ -212,16 +217,13 @@ export function useNewTabAgentMenuRows(
           if (answered === agents.length) {
             clearTimeout(timer)
           }
-          // Why: only a host verdict relabels a row; a read that could not answer keeps what was known.
-          if (support.kind !== 'admitted' && support.kind !== 'declined') {
-            return
-          }
-          setAnswers((previous) => ({
-            owner,
-            values: new Map<TuiAgent, HostChatAnswer>(
-              previous?.owner === owner ? previous.values : []
-            ).set(agent, answerFromSupport(support))
-          }))
+          recordHostChatAnswer(
+            ownerKey,
+            agent,
+            support.kind === 'admitted' || support.kind === 'declined'
+              ? answerFromSupport(support)
+              : 'unanswered'
+          )
         },
         () => undefined
       )
@@ -231,7 +233,10 @@ export function useNewTabAgentMenuRows(
       clearTimeout(timer)
       controller.abort()
     }
-  }, [owner, open, worktreeId])
+  }, [owner, ownerKey, open, worktreeId])
+  const asking = structuredAgentSessionTargetForHost(owner.executionHostId)
+    ? owner.eligible.split(',')
+    : []
   const rows = buildNewTabAgentMenuRows({
     settings,
     detectedOnHost: detection.detectedIds,
@@ -239,10 +244,16 @@ export function useNewTabAgentMenuRows(
     catalogLoaded,
     hostChatAnswer: (agent) => {
       const preliminary = hostChatAnswer(inputFor(agent))
-      // Until the host answers, this client's facts decide; the click's admission owns a refusal.
-      return ['yes', 'not-yet-known'].includes(preliminary)
-        ? ((answers?.owner === owner ? answers.values.get(agent) : undefined) ?? preliminary)
-        : preliminary
+      if (!['yes', 'not-yet-known'].includes(preliminary)) {
+        return preliminary
+      }
+      const recorded = readHostChatAnswer(ownerKey, agent)
+      if (recorded === undefined) {
+        // Why: a row stays quietly disabled while its host is asked, so it never flips under the pointer.
+        return open && asking.includes(agent) ? 'not-yet-known' : preliminary
+      }
+      // A host that could not answer leaves this client's facts; the click's admission owns a refusal.
+      return recorded === 'unanswered' ? preliminary : recorded
     }
   }).map((row) => ({ ...row, executionHostId: parseExecutionHostId(facts.executionHostId)?.id }))
   return { rows, detection }

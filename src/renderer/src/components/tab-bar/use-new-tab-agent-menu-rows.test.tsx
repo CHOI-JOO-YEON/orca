@@ -81,8 +81,8 @@ it.each(['local', 'runtime:server'] as const)(
     const claude = () => hook.result.current.rows.find((row) => row.agent === 'claude')
     expect(mocks.support).not.toHaveBeenCalled()
     hook.rerender({ open: true, id: 'one' })
-    // Before the host answers, a chat this client can see is supported stays clickable.
-    expect(claude()).toMatchObject({ kind: 'chat' })
+    // Until the host answers, the row waits disabled instead of flipping once it does.
+    expect(claude()).toMatchObject({ kind: 'chat-unavailable', reason: 'pending' })
     await act(async () => {
       pending[0]?.resolve({ kind: 'declined', reason: 'wsl' })
       pending[1]?.resolve({ kind: 'declined', reason: 'unsupported-version' })
@@ -90,6 +90,12 @@ it.each(['local', 'runtime:server'] as const)(
     expect(
       hook.result.current.rows.map((row) => ('reason' in row ? row.reason : row.kind))
     ).toEqual(expect.arrayContaining(['wsl', 'not-on-host', 'cli']))
+    // Another tab group on the same workspace shows the host's answer at once.
+    const sibling = renderHook(() => useNewTabAgentMenuRows('one', false, { kind: 'local' }))
+    expect(sibling.result.current.rows.find((row) => row.agent === 'claude')).toMatchObject({
+      reason: 'wsl'
+    })
+    sibling.unmount()
     hook.rerender({ open: false, id: 'one' })
     expect(pending[2]?.signal.aborted).toBe(true)
     hook.rerender({ open: true, id: 'one' })
@@ -109,7 +115,7 @@ it.each(['local', 'runtime:server'] as const)(
 )
 
 it('keeps a supported chat clickable when the host cannot answer', async () => {
-  const hook = renderHook(() => useNewTabAgentMenuRows('one', true, { kind: 'local' }))
+  const hook = renderHook(() => useNewTabAgentMenuRows('three', true, { kind: 'local' }))
   await act(async () =>
     pending[0]?.resolve({
       kind: 'unreachable',
