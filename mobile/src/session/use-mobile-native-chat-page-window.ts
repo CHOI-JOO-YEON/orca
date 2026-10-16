@@ -138,8 +138,9 @@ export function useMobileNativeChatPageWindow(args: {
     (s: MobileNativeChatWindowScroller, to: number) => {
       const max = s.scrollHeight - s.clientHeight
       const target = Math.max(0, Math.min(to, max))
-      // iOS still bouncing past an end: a write then lands while WebKit owns the scroll.
-      if (s.scrollTop >= 0 && s.scrollTop <= max + 1 && Math.abs(target - s.scrollTop) >= 0.5) {
+      // Above the top only while iOS bounces there. Past the end may be a clamp the browser hasn't
+      // applied yet; every write here waits for rest, so it isn't a bounce.
+      if (s.scrollTop >= 0 && Math.abs(target - s.scrollTop) >= 0.5) {
         motion.wrote(target)
         s.scrollTop = target
       }
