@@ -13,7 +13,7 @@ import {
 } from '../structured-agent-cli-writers'
 
 export abstract class OrcaRuntimeWithStructuredSessionCliWriterHost extends OrcaRuntimeWithGetWorktreePs {
-  protected cliWriterPane(row: AgentStatusIpcPayload): CliWriterPane | null {
+  protected cliWriterPane(row: Pick<AgentStatusIpcPayload, 'paneKey' | 'worktreeId'>): CliWriterPane | null {
     try {
       const pane = this.resolveTerminalPane(row.paneKey, row.worktreeId ?? '')
       const pty = pane.ptyId ? this.ptysById.get(pane.ptyId) : undefined

@@ -18,7 +18,7 @@ import {
   inspectLocalPtyChildProcesses
 } from './local-pty-foreground-inspection'
 import { LocalPtyProvider } from './local-pty-provider'
-import { ptyProcesses, ptyShellPath } from './local-pty-provider-state'
+import { ptyIncarnations, ptyProcesses, ptyShellPath } from './local-pty-provider-state'
 import { inspectPtyProviderProcess } from './pty-process-inspection'
 
 // Bare, so the retired pane's spawn file equals the recorded name (the path's basename).
@@ -43,6 +43,7 @@ function registerPane(id: string, foreground: string | (() => string), shell?: s
     resume() {}
   }
   ptyProcesses.set(id, pane)
+  ptyIncarnations.set(id, `incarnation:${id}`)
   if (shell) {
     ptyShellPath.set(id, shell)
   }
@@ -70,6 +71,7 @@ async function registerRetiredPane(id: string): Promise<pty.IPty> {
     interval: 10
   })
   ptyProcesses.set(id, term)
+  ptyIncarnations.set(id, `incarnation:${id}`)
   ptyShellPath.set(id, POSIX_SHELL)
   return term
 }
@@ -81,6 +83,7 @@ beforeEach(() => {
 
 afterEach(() => {
   ptyProcesses.clear()
+  ptyIncarnations.clear()
   ptyShellPath.clear()
 })
 

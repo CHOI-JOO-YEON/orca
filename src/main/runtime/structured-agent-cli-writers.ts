@@ -17,7 +17,7 @@ export type CliWriterHost = {
   rows: () => AgentStatusIpcPayload[]
   saved: () => SleepingAgentSessionRecord[]
   observation: (row: AgentStatusIpcPayload) => CliWriterObservation | null
-  pane: (row: AgentStatusIpcPayload) => CliWriterPane | null
+  pane: (row: Pick<AgentStatusIpcPayload, 'paneKey' | 'worktreeId'>) => CliWriterPane | null
   sleeping: (workspaceId: string) => boolean
   shellAlone: (pane: CliWriterPane) => Promise<boolean>
 }
@@ -44,6 +44,12 @@ export async function assertCliConversationWritersExited(
       CLI_CONVERSATION_ADOPTING_AGENTS[record.agent] === agent &&
       normalizeAgentProviderSession(record.providerSession)?.id === providerSessionId)
     const saved = savedCandidates()
+    const savedIdentity = (record: SleepingAgentSessionRecord) => [record.paneKey, record.worktreeId,
+      record.connectionId, record.agent, record.providerSession.key, record.providerSession.id,
+      record.providerSession.transcriptPath, record.capturedAt, record.updatedAt] as const
+    const savedIdentities = new Map(saved.map((record) => [record, savedIdentity(record)] as const))
+    const savedCurrent = (record: SleepingAgentSessionRecord) => savedCandidates().includes(record) &&
+      savedIdentity(record).every((value, index) => value === savedIdentities.get(record)?.[index])
     const covered = new Map<SleepingAgentSessionRecord, () => boolean>()
     const rows = host.rows().filter(
       (row) => !row.connectionId && !row.structuredHost &&
@@ -80,7 +86,27 @@ export async function assertCliConversationWritersExited(
           !host.sleeping(row.worktreeId ?? '') && matches(record) && host.saved().includes(record))
       }
     }
-    if ([...saved, ...savedCandidates()].some((record) => !covered.get(record)?.())) {
+    for (const [record, identity] of savedIdentities) {
+      if (covered.has(record)) {
+        continue
+      }
+      const [paneKey, worktreeId, , savedAgent] = identity
+      if (savedAgent === 'opencode' || savedAgent === 'opencode2') {
+        throw refuse()
+      }
+      const coordinates = { paneKey, worktreeId }
+      const pane = host.pane(coordinates)
+      if (!pane) {
+        throw refuse()
+      }
+      const current = () => savedCurrent(record) && !host.sleeping(worktreeId) &&
+        host.pane(coordinates)?.identity === pane.identity && !host.rows().some((row) => row.paneKey === paneKey)
+      if (!current() || !(await host.shellAlone(pane)) || !current()) {
+        throw refuse()
+      }
+      covered.set(record, current)
+    }
+    if ([...saved, ...savedCandidates()].some((record) => !savedCurrent(record) || !covered.get(record)?.())) {
       throw refuse()
     }
   } catch {
