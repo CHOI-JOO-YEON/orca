@@ -33,6 +33,7 @@ import {
   routeNewTabLaunch
 } from '@/lib/launch-agent-in-new-tab-host-agents'
 import type { AgentLaunchRequestId } from '@/lib/agent-launch-request-id'
+import type { NativeChatComposerFocusIntent } from '@/components/native-chat/use-native-chat-composer-reveal-focus'
 
 /** The user action this launch serves: minted where that action is handled, or carried by the
  *  route the caller already planned for it. */
@@ -49,6 +50,8 @@ export type LaunchAgentInNewTabArgs = LaunchAgentInNewTabRequest & {
   selectedExecutionHostId?: AgentSessionLaunchRequest['selectedExecutionHostId']
   agent: TuiAgent
   worktreeId: string
+  /** Captured at a new-chat action before the host can delay route selection. */
+  focusIntent?: NativeChatComposerFocusIntent
   /** Tab group the user launched from; keeps split-group launches in that pane instead of the active group. */
   groupId?: string
   /** Optional initial prompt; delivery depends on `promptDelivery` and the agent's prompt mode. */
@@ -137,6 +140,7 @@ function launchAgentInNewTabInternal(args: LaunchAgentInNewTabArgs): LaunchAgent
   const store = useAppStore.getState()
   const executionContext = resolveAgentLaunchExecutionContext(store, { worktreeId, launchPlatform })
   if (!executionContext) {
+    args.focusIntent?.cancel()
     return null
   }
   const { resolvedLaunchPlatform, isRemote, queuedShell } = executionContext
@@ -171,6 +175,7 @@ function launchAgentInNewTabInternal(args: LaunchAgentInNewTabArgs): LaunchAgent
   let promptDeliveryResult: Promise<{ delivered: boolean; failureNotified: boolean }> | undefined
 
   if (!startupPlan) {
+    args.focusIntent?.cancel()
     return null
   }
 
@@ -195,6 +200,7 @@ function launchAgentInNewTabInternal(args: LaunchAgentInNewTabArgs): LaunchAgent
     const structured = launchStructuredAgentFromNewTab({
       plan,
       worktreeId,
+      ...(args.focusIntent ? { focusIntent: args.focusIntent } : {}),
       ...(groupId ? { groupId } : {}),
       ...(beforeSurfaceOpen ? { beforeSurfaceOpen } : {}),
       ...(args.onStructuredHostDeclined ? { onHostDeclined: args.onStructuredHostDeclined } : {}),
@@ -207,9 +213,14 @@ function launchAgentInNewTabInternal(args: LaunchAgentInNewTabArgs): LaunchAgent
           agentSessionLaunchPlan: terminalPlan
         })
     })
-    return structured && { ...structured, startupPlan }
+    if (!structured) {
+      args.focusIntent?.cancel()
+      return null
+    }
+    return { ...structured, startupPlan }
   }
 
+  args.focusIntent?.cancel()
   const runtimeEnvironmentId = getRuntimeEnvironmentIdForWorktree(store, worktreeId)
   if (isWebRuntimeSessionActive(runtimeEnvironmentId)) {
     if (beforeSurfaceOpen?.({ kind: 'host-published' }) === false) {

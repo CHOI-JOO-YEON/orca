@@ -2,6 +2,7 @@ import React, { useCallback } from 'react'
 import { toast } from 'sonner'
 import { launchAgentInNewTab } from '@/lib/launch-agent-in-new-tab'
 import { newAgentLaunchRequestId } from '@/lib/agent-launch-request-id'
+import { captureNativeChatComposerFocusIntent } from '@/components/native-chat/use-native-chat-composer-reveal-focus'
 import { newAgentPromptOutcome } from '@/lib/new-agent-prompt-outcome'
 import { activeAgentNotesSendFailureMessage } from '@/lib/active-agent-note-send-result'
 import { Settings as SettingsIcon } from 'lucide-react'
@@ -113,6 +114,7 @@ export function useTabAgentMenuLaunch({
       const label = entry?.label ?? agent
       const result = launchAgentInNewTab({
         requestId: newAgentLaunchRequestId(),
+        focusIntent: captureNativeChatComposerFocusIntent(),
         ...(row.kind === 'chat' || row.kind === 'cli'
           ? {
               requestedSurface: row.kind === 'chat' ? ('chat' as const) : ('terminal' as const),

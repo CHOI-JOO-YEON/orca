@@ -223,7 +223,6 @@ export function useTabBarCreateMenuController({
       case 'new-simulator':
       case 'go-to-simulator':
         onNewSimulatorTab?.()
-        break
     }
   }
   const launchAgentRow = useTabAgentMenuLaunch({
