@@ -12,6 +12,7 @@ export class MobileNativeChatPageMotion {
   private lastReaderScroll = 0
   /** Where the page last accounted for the scroll: its write, an observed scroll, a resize. */
   private seen = 0
+  private seenMax = Infinity
   /** A commit changed what is drawn and its resize callback hasn't run: a move now is layout's. */
   private unreconciled = false
   private drawn = ''
@@ -64,9 +65,9 @@ export class MobileNativeChatPageMotion {
     })
   }
 
-  reconciled(scrollTop: number): void {
+  reconciled(scrollTop: number, max: number): void {
     this.unreconciled = false
-    this.seen = scrollTop
+    ;[this.seen, this.seenMax] = [scrollTop, max]
   }
 
   /** What moved the scroll to `scrollTop` since the page last accounted for it, and by how much. Not
@@ -77,8 +78,8 @@ export class MobileNativeChatPageMotion {
     max: number,
     placeMoved: () => boolean
   ): { by: 'own' | 'layout' | 'reader' | 'none'; moved: number } {
-    const [from, moved] = [this.seen, scrollTop - this.seen]
-    this.seen = scrollTop
+    const [from, fromMax, moved] = [this.seen, this.seenMax, scrollTop - this.seen]
+    ;[this.seen, this.seenMax] = [scrollTop, max]
     const at = this.own.findIndex((target) => Math.abs(target - scrollTop) <= 1)
     if (at !== -1) {
       this.own.splice(0, at + 1)
@@ -87,7 +88,8 @@ export class MobileNativeChatPageMotion {
     if (Math.abs(moved) < 0.5) {
       return { by: 'none', moved }
     }
-    const clamped = scrollTop >= max - 0.5 && from > max
+    // Pulled back onto a shorter end from where the old one allowed; iOS bouncing past an end is not.
+    const clamped = Math.abs(scrollTop - max) < 0.5 && from > max + 0.5 && from <= fromMax + 0.5
     if (!this.touching && (this.unreconciled || clamped || placeMoved())) {
       return { by: 'layout', moved }
     }

@@ -304,7 +304,7 @@ export function useMobileNativeChatPageWindow(args: {
       // The place is where the reader is now: a correction that couldn't land, or a move while
       // they scrolled, is not owed later.
       takeAnchor(s)
-      motion.reconciled(s.scrollTop)
+      motion.reconciled(s.scrollTop, s.scrollHeight - s.clientHeight)
       cover(s)
       motion.poke()
     },
