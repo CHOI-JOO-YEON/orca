@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 const collect = vi.hoisted(() => vi.fn())
 vi.mock('../../../orcad/orcad-terminal-census', () => ({ collectOrcadTerminalCensus: collect }))
 
+import { closeTerminalAdmission, isTerminalAdmissionClosed } from '../../terminal-admission-fence'
 import { ORCAD_TERMINAL_CENSUS_METHODS } from './orcad-terminal-census'
 
 const handler = ORCAD_TERMINAL_CENSUS_METHODS[0]!.handler
@@ -18,6 +19,7 @@ function call(params: Record<string, unknown>, released: number) {
 afterEach(() => {
   vi.useRealTimers()
   collect.mockReset()
+  closeTerminalAdmission(0)
 })
 
 describe('orcad.terminalCensus', () => {
@@ -33,6 +35,25 @@ describe('orcad.terminalCensus', () => {
 
     await expect(result).resolves.toEqual(idle)
     expect(runtime.releaseFinishedAutomationRunTerminals).toHaveBeenCalledOnce()
+  })
+
+  it('closes terminal admission before counting, says until when, and reopens on 0 (R32)', async () => {
+    let admissionClosedWhileCounting = false
+    collect.mockImplementation(async () => {
+      admissionClosedWhileCounting = isTerminalAdmissionClosed()
+      return idle
+    })
+    const fenced = await call({ closeAdmissionForMs: 60_000 }, 0).result
+    expect(admissionClosedWhileCounting).toBe(true)
+    expect(fenced).toMatchObject({ ...idle, admissionClosedUntil: expect.any(Number) })
+    expect(isTerminalAdmissionClosed()).toBe(true)
+
+    await expect(call({ closeAdmissionForMs: 0 }, 0).result).resolves.toMatchObject({
+      admissionClosedUntil: 0
+    })
+    expect(isTerminalAdmissionClosed()).toBe(false)
+    // A census that asks nothing about admission reports nothing about it.
+    await expect(call({}, 0).result).resolves.toEqual(idle)
   })
 
   it('still counts terminals it may not close, and closes nothing for a plain census', async () => {
