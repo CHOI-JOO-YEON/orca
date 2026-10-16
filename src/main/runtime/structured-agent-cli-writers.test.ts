@@ -104,6 +104,9 @@ describe('execution-host conversation writer inspection', () => {
     check.host.saved = () => saved
     check.host.rows = () => []
     await expect(check.run()).rejects.toMatchObject(refusal)
+    saved = [{ ...record, connectionId: 'ssh-A' }]
+    await expect(check.run()).resolves.toBeUndefined()
+    saved = [record]
     check.host.rows = () => [{ ...row, providerSession: { key: 'session_id', id: 'other' } }]
     await expect(check.run()).rejects.toMatchObject(refusal)
     check.host.rows = () => [row]

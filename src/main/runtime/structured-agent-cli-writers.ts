@@ -40,7 +40,7 @@ export async function assertCliConversationWritersExited(
   const refuse = () =>
     agentSessionRefusalError('agent_session_conflict', { reason: 'conversationHeldElsewhere' })
   try {
-    const savedCandidates = () => host.saved().filter((record) => adoptsCliConversations(record.agent) &&
+    const savedCandidates = () => host.saved().filter((record) => !record.connectionId && adoptsCliConversations(record.agent) &&
       CLI_CONVERSATION_ADOPTING_AGENTS[record.agent] === agent &&
       normalizeAgentProviderSession(record.providerSession)?.id === providerSessionId)
     const saved = savedCandidates()
