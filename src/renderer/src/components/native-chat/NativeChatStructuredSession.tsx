@@ -130,7 +130,6 @@ export function NativeChatStructuredSession(
   const hostPermission = useNativeChatHostPermissionGate(props.target, props.agent, agentLabel)
   const hostHeld = hostPermission.sendBlockedReason !== null
   const submits = useStructuredNativeChatSubmitReveal(controller, provisionalLaunch.retry, hostHeld)
-  const { revealLatest } = submits
   const promptResponse = useStructuredPromptResponseHold(submits.respond)
   const continuation = useNativeChatInterruptedContinuation({
     target: props.target,
@@ -236,7 +235,7 @@ export function NativeChatStructuredSession(
     optionPickerRequest,
     setOptionPickerRequest,
     onError: reportComposerError,
-    onSubmitted: revealLatest,
+    onSubmitted: submits.revealLatest,
     sendBlockedReason:
       hostPermission.sendBlockedReason ?? installSlotSendBlockedReason(installSlot, agentLabel)
   })
@@ -398,9 +397,7 @@ export function NativeChatStructuredSession(
               answerInputRef={questionAnswerInputRef}
             />
           ) : null}
-          {composerShown ? (
-            <NativeChatInstallSlot slot={installSlot} agentLabel={agentLabel} />
-          ) : null}
+          {composerShown && <NativeChatInstallSlot slot={installSlot} agentLabel={agentLabel} />}
           {composerOpen ? (
             <NativeChatComposer
               ref={composerRef}
