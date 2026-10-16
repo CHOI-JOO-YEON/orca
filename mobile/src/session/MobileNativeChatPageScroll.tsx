@@ -1,22 +1,18 @@
 import type { Ref } from 'react'
 import { ScrollView, StyleSheet, View, type ScrollViewProps, type ViewStyle } from 'react-native'
 
-/** The page's scroller: the transcript in one wrapper, then a 1 px end marker. The transcript is
- *  never in the browser's scroll anchoring: the page keeps the reader's place itself, the same on
- *  every browser (WebKit has no anchoring), so no browser move overlaps a correction. While the
- *  reader follows, the marker is the anchor, so trimming a row above can't scroll the view off the
- *  end; parked, nothing is. */
+/** The page's scroller, with the transcript never in the browser's scroll anchoring: only the page
+ *  moves the scroll (its end pin, its corrections), the same on every browser (WebKit has none), so
+ *  no move of the browser's is taken for the reader's. */
 export function MobileNativeChatPageScroll({
   ref,
   children,
   contentContainerStyle,
-  endAnchored,
   ...props
-}: ScrollViewProps & { ref?: Ref<ScrollView>; endAnchored: boolean }) {
+}: ScrollViewProps & { ref?: Ref<ScrollView> }) {
   return (
     <ScrollView ref={ref} {...props} contentContainerStyle={pageScroll.fill}>
       <View style={[contentContainerStyle, pageScroll.outOfAnchoring]}>{children}</View>
-      <View style={[pageScroll.endMarker, !endAnchored && pageScroll.outOfAnchoring]} />
     </ScrollView>
   )
 }
@@ -26,6 +22,5 @@ const outOfAnchoring: ViewStyle & { overflowAnchor: 'none' } = { overflowAnchor:
 
 const pageScroll = StyleSheet.create({
   fill: { flexGrow: 1 },
-  outOfAnchoring,
-  endMarker: { height: 1 }
+  outOfAnchoring
 })

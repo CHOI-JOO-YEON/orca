@@ -106,7 +106,6 @@ export function MobileNativeChatPageList({
   return (
     <MobileNativeChatPageScroll
       ref={scroll}
-      endAnchored={endAnchored}
       contentContainerStyle={styles.listContent}
       // Let link/file taps land while the composer keyboard is up
       // instead of being swallowed by the dismiss gesture.

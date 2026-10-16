@@ -717,20 +717,19 @@ describe('MobileNativeChatView', () => {
       expect(scrollToEnd).not.toHaveBeenCalled()
     })
 
-    // What the page's scroller tells the browser: the transcript's wrapper, then the end marker.
-    function anchoring(): { transcript: unknown[]; marker: unknown[] } {
-      const [content, marker, ...rest] = page().children.filter(
+    // What the page's scroller tells the browser: the transcript's wrapper, its only child.
+    function transcriptStyle(): unknown[] {
+      const [content, ...rest] = page().children.filter(
         (child): child is ReactTestInstance => typeof child !== 'string'
       )
       expect(rest).toHaveLength(0)
-      return { transcript: content!.props.style, marker: marker!.props.style }
+      return content!.props.style
     }
 
-    it('keeps the transcript out of the browser anchoring; the end marker anchors only a following reader', async () => {
+    it('keeps the transcript out of the browser anchoring, following or parked', async () => {
       const turns = ['a1', 'a2', 'a3', 'a4'].map((id) => assistantTurn(id, id))
       const jumps = () =>
         renderer!.root.findAll((node) => node.props.accessibilityLabel === 'Scroll to latest')
-      const outOfAnchoring = { overflowAnchor: 'none' }
       await render({ folded: turns.slice(0, 3) })
       scrollTo(500, 1_000)
 
@@ -738,16 +737,13 @@ describe('MobileNativeChatView', () => {
       await update({ folded: turns.slice(1) })
       expect(scrollToOffset).not.toHaveBeenCalled()
       expect(jumps()).toHaveLength(0)
-      expect(anchoring().transcript).toContainEqual(outOfAnchoring)
-      expect(anchoring().marker).not.toContainEqual(outOfAnchoring)
+      expect(transcriptStyle()).toContainEqual({ overflowAnchor: 'none' })
       resized()
 
-      // Parked, the page alone keeps the place, so nothing is a browser anchor.
+      // Parked, the page alone keeps the place, so the browser still anchors nothing.
       scrollTo(300, 1_000)
-      expect(anchoring().transcript).toContainEqual(outOfAnchoring)
-      expect(anchoring().marker).toContainEqual(outOfAnchoring)
-      act(() => jumps()[0]!.props.onPress())
-      expect(anchoring().marker).not.toContainEqual(outOfAnchoring)
+      expect(jumps()).toHaveLength(1)
+      expect(transcriptStyle()).toContainEqual({ overflowAnchor: 'none' })
     })
 
     it('loads older history from the Load earlier control, not from reaching the top', async () => {
