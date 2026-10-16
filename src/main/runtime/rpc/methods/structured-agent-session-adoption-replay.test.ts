@@ -327,14 +327,18 @@ describe('committed adopting create RPC replay', () => {
       } } }
     })
 
+    // Only an exact committed replay bypasses an unavailable writer scan.
+    const freshRefusal = unary
+      ? { code: 'agent_session_identity_required' }
+      : { code: 'agent_session_conflict', details: { reason: 'conversationHeldElsewhere' } }
     const otherOperation = createParams(`${Date.now()}-00000000000000000000000000000002`)
     expect(await call(dispatcher, otherOperation)).toMatchObject({
       ok: true,
-      result: { ok: false, refusal: { code: 'agent_session_identity_required' } }
+      result: { ok: false, refusal: freshRefusal }
     })
     expect(await call(dispatcher, params, { ...CLIENT, clientId: 'device-b' })).toMatchObject({
       ok: true,
-      result: { ok: false, refusal: { code: 'agent_session_identity_required' } }
+      result: { ok: false, refusal: freshRefusal }
     })
     expect(sessionAdapter.acquire).toHaveBeenCalledTimes(1)
     expect(internal.publishStructuredAgentSessionTab).toHaveBeenCalledTimes(2)
