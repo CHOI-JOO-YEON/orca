@@ -19424,6 +19424,7 @@
       "heroBody": "One-time {{size}} MB download. It's saved on this computer and shared by every {{agent}} chat.",
       "heroBodyNoSize": "One-time download. It's saved on this computer and shared by every {{agent}} chat.",
       "stripSize": "{{size}} MB download, saved on this computer",
+      "settingsHint": "Also in Settings › Chat › Providers",
       "installShort": "Install",
       "tryAgain": "Try again",
       "cancelShort": "Cancel",

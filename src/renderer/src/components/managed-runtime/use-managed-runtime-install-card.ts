@@ -52,8 +52,13 @@ export function useManagedRuntimeInstallCard(
       )
       .finally(() => setPending(null))
   }
+  const card = managedRuntimeInstallCard(state, agentLabel, layout, pending === 'cancel')
   return {
-    card: managedRuntimeInstallCard(state, agentLabel, layout, pending === 'cancel'),
+    // An offer's hint points at Settings › Chat › Providers, which installs on this computer only.
+    card:
+      card.tone === 'offer' && observation.subject.target.kind !== 'local'
+        ? { ...card, hint: null }
+        : card,
     pending: pending !== null,
     refusal,
     act
