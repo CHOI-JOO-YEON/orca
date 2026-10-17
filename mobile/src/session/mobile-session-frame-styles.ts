@@ -97,7 +97,10 @@ export const mobileSessionFrameStyles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     alignSelf: 'stretch',
-    marginVertical: -spacing.xs
+    marginVertical: -spacing.xs,
+    // Fixed edge so tabs scrolled past it read as clipped, not as part of the title.
+    borderLeftWidth: 1,
+    borderLeftColor: colors.borderSubtle
   },
   tabScroll: {
     flex: 1,
@@ -110,6 +113,9 @@ export const mobileSessionFrameStyles = StyleSheet.create({
   tabContent: {
     paddingLeft: spacing.sm,
     paddingRight: spacing.sm
+  },
+  tabContentInTopBar: {
+    paddingLeft: 0
   },
   tab: {
     width: 128,

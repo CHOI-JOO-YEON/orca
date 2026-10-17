@@ -69,7 +69,7 @@ export function MobileSessionTabStrip({
         horizontal
         showsHorizontalScrollIndicator={false}
         style={[styles.tabScroll, inTopBar && styles.tabScrollInTopBar]}
-        contentContainerStyle={styles.tabContent}
+        contentContainerStyle={[styles.tabContent, inTopBar && styles.tabContentInTopBar]}
         keyboardShouldPersistTaps="handled"
         scrollEventThrottle={16}
         onScroll={(e) => {
@@ -89,7 +89,7 @@ export function MobileSessionTabStrip({
             key={t.id}
             style={[
               styles.tab,
-              index === 0 && styles.tabFirst,
+              index === 0 && !inTopBar && styles.tabFirst,
               t.id === activeSessionTabId && styles.tabActive
             ]}
             onLayout={(e) => {
