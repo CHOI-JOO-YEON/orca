@@ -728,6 +728,7 @@ describe('MobileNativeChatView', () => {
       const browserHolds = () => pageScroller.style.overflowAnchor === 'auto'
       await render({ folded: ['a1', 'a2', 'a3'].map((id) => assistantTurn(id, id)) })
       scrollTo(500, 1_000)
+      resized()
       expect(browserHolds()).toBe(false)
 
       // The reader wheels up to just short of the end: parked.
