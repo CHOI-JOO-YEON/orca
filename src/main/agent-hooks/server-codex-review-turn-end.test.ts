@@ -109,6 +109,9 @@ describe('Codex turn completion without Stop', () => {
     })
     await settle()
     expect(desktop.getStatusSnapshot()[0]).toMatchObject({ mainAgent: { state: 'working' } })
+    // A delayed hook from the review's ended turn does not end the newer turn.
+    await hook({ ...review, hook_event_name: 'PostToolUse', tool_name: 'Bash' })
+    expect(desktop.getStatusSnapshot()[0]).toMatchObject({ mainAgent: { state: 'working' } })
 
     // A real Stop that lands before its rollout end, then a compaction, never rearms that turn.
     await hook({ ...review, turn_id: 'next-turn', hook_event_name: 'Stop' })

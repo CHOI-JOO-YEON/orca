@@ -289,7 +289,8 @@ export function normalizeCodexEvent(
 }
 
 /** A root hook for a turn whose rollout already recorded its end restates that end as Stop,
- *  since Codex skips Stop for internal subagents such as /review. */
+ *  since Codex skips Stop for internal subagents such as /review. A delayed hook for an ended
+ *  turn the lead has moved past is dropped, so it can neither end nor rearm the current turn. */
 export function codexHookEventForEndedTurn(
   state: HookListenerState,
   paneKey: string,
@@ -305,7 +306,9 @@ export function codexHookEventForEndedTurn(
   ) {
     return eventName
   }
-  return codexTranscriptTurnEnd(state.codexSubagentTranscriptByPaneKey.get(paneKey), turnId)
-    ? 'Stop'
-    : eventName
+  if (!codexTranscriptTurnEnd(state.codexSubagentTranscriptByPaneKey.get(paneKey), turnId)) {
+    return eventName
+  }
+  const leadTurnId = state.codexLeadStateByPaneKey.get(paneKey)?.turnId
+  return leadTurnId && leadTurnId !== turnId ? undefined : 'Stop'
 }
