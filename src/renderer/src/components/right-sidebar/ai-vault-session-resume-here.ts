@@ -10,6 +10,9 @@ import {
 import { adoptsCliConversations } from '../../../../shared/structured-agent-cli-conversation-adoption'
 import { structuredAgentSessionPaneKey } from '../../../../shared/structured-agent-session-projection'
 import type { Tab } from '../../../../shared/tab-types'
+import { getStructuredAgentSessionLaunchLifecycle } from '@/lib/structured-agent-session-launch-registry'
+import { structuredAgentSessionTargetForHost } from '@/runtime/structured-agent-session-owner'
+import { getStructuredAgentSessionStatusFeed } from '@/runtime/structured-agent-session-status-feed'
 import type { AiVaultSessionRowChatActions } from './ai-vault-session-chat-action'
 import { resumeAiVaultSessionInNewChat } from './ai-vault-session-resume-in-chat-launch'
 import {
@@ -126,11 +129,29 @@ function closeReplacedChat(here: AiVaultResumeHere): void {
   if (!tab || tab.isPinned) {
     return
   }
-  // Why: closing a chat stops its agent, so only a finished turn closes; one replying, asking,
-  // starting, or with nothing reported yet stays open beside the new chat, as does an unsent draft.
+  // Why: closing a chat stops its agent, so only a finished turn or an untouched chat closes; one
+  // replying, asking or still starting stays open beside the new chat, as does an unsent draft.
   const status = state.agentStatusByPaneKey[structuredAgentSessionPaneKey(tab.id, tab.entityId)]
+  const settled = status ? status.state === 'done' : isUntouchedChat(here.workspaceId, tab)
   const draft = readNativeChatComposerDraft(structuredAgentSessionDraftScopeKey(tab.entityId))
-  if (status?.state === 'done' && draft.text.trim() === '' && draft.images.length === 0) {
+  if (settled && draft.text.trim() === '' && draft.images.length === 0) {
     state.closeUnifiedTab(tab.id)
   }
+}
+
+/** Its launch finished and its host, observed live, reports no message and no starting child. */
+function isUntouchedChat(workspaceId: string, tab: Tab): boolean {
+  const lifecycle = getStructuredAgentSessionLaunchLifecycle(workspaceId, tab.entityId)
+  // The host stamped on the tab; an unstamped one can't be read, so it counts as busy.
+  const target = structuredAgentSessionTargetForHost(tab.executionHostId)
+  if ((lifecycle !== null && lifecycle !== 'published') || !target) {
+    return false
+  }
+  const feed = getStructuredAgentSessionStatusFeed(target)
+  const summary = feed.getSnapshot().get(tab.entityId)
+  return (
+    feed.getSessionObservation(tab.entityId) === 'live' &&
+    summary?.status === null &&
+    summary.hostExecutionPhase !== 'starting'
+  )
 }

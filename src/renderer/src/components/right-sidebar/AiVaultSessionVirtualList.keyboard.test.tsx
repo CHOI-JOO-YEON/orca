@@ -53,6 +53,14 @@ vi.mock('@/lib/structured-agent-session-launch-admission', async (importOriginal
     cancel: vi.fn()
   })
 }))
+// What the host reports for each chat; an untouched one has no message yet.
+const hostStatus = vi.hoisted(() => new Map<string, { status: null }>())
+vi.mock('@/runtime/structured-agent-session-status-feed', () => ({
+  getStructuredAgentSessionStatusFeed: () => ({
+    getSnapshot: () => hostStatus,
+    getSessionObservation: () => 'live'
+  })
+}))
 vi.mock('@/runtime/structured-agent-session-tab-retirement', () => ({
   beginStructuredAgentSessionTabClose: vi.fn()
 }))
@@ -264,27 +272,27 @@ describe('Session History keyboard selection', () => {
     expect(order()).toEqual(['old', resumed, 'other'])
     act(() => store().closeUnifiedTab(resumed))
 
-    // Only a finished turn closes: a chat still replying keeps running beside its replacement.
+    // A chat still replying keeps running beside its replacement.
     const paneKey = structuredAgentSessionPaneKey('old', 'old')
-    const status = (state: 'working' | 'done') =>
-      useAppStore.setState({
-        agentStatusByPaneKey: {
-          [paneKey]: {
-            state,
-            prompt: '',
-            updatedAt: 0,
-            stateStartedAt: 0,
-            paneKey,
-            stateHistory: []
-          }
+    useAppStore.setState({
+      agentStatusByPaneKey: {
+        [paneKey]: {
+          state: 'working',
+          prompt: '',
+          updatedAt: 0,
+          stateStartedAt: 0,
+          paneKey,
+          stateHistory: []
         }
-      })
-    status('working')
+      }
+    })
     await pickFirstRow({ kind: 'structured', sessionId: 'new' })
     expect(order()).toEqual(['old', resumed, 'other'])
 
+    // The main path: a new, empty chat is replaced by the conversation picked in it.
     act(() => store().closeUnifiedTab(resumed))
-    status('done')
+    useAppStore.setState({ agentStatusByPaneKey: {} })
+    hostStatus.set('old', { status: null })
     await pickFirstRow({ kind: 'structured', sessionId: 'new' })
     expect(order()).toEqual([resumed, 'other'])
   })
