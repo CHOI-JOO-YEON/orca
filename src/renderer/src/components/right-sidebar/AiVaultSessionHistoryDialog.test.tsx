@@ -84,6 +84,7 @@ function openHistory(initialQuery = '', agent?: AiVaultAgent) {
   act(() =>
     openAgentSessionHistoryModal({
       workspace: { worktreeId: CHAT_WORKTREE },
+      chatTabId: 'chat-tab',
       initialQuery,
       ...(agent ? { agent } : {})
     })

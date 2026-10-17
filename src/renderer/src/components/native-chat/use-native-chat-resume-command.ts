@@ -99,6 +99,7 @@ export function useNativeChatResumeCommand(args: {
       textareaRef.current?.focus()
       openAgentSessionHistoryModal({
         workspace,
+        chatTabId: terminalTabId,
         initialQuery: search,
         ...(isAiVaultAgent(agent) ? { agent } : {})
       })

@@ -14,6 +14,16 @@ import type { AgentLaunchRequestId } from '@/lib/agent-launch-request-id'
 import { activateAndRevealWorkspace } from '@/lib/worktree-activation'
 import { beginStructuredAgentSessionProvisionalLaunch } from '@/lib/structured-agent-session-provisional-tab'
 import { structuredLaunchFailure } from '@/lib/structured-agent-session-launch-failure'
+import type { StructuredAgentLaunchSettlement } from '@/lib/structured-agent-launch-settlement'
+import type { NativeChatComposerFocusIntent } from '@/components/native-chat/use-native-chat-composer-reveal-focus'
+
+/** A chat the resumed one takes the place of: it opens right after that tab. */
+export type AiVaultChatReplacement = {
+  afterTabId: string
+  /** Told the new tab's id once it opens. */
+  focusIntent: NativeChatComposerFocusIntent
+  onSettled: (settlement: StructuredAgentLaunchSettlement) => void
+}
 
 export function activateAiVaultResumeWorkspace(workspaceId: string): boolean {
   return activateAndRevealWorkspace(workspaceId) !== false
@@ -27,7 +37,8 @@ export async function resumeAiVaultSessionInNewChat(
   session: AiVaultSession,
   rowAgent: CliConversationRowAgent,
   worktreeId: string,
-  requestId: AgentLaunchRequestId
+  requestId: AgentLaunchRequestId,
+  replacing?: AiVaultChatReplacement
 ): Promise<void> {
   try {
     // Codex rows can live under a shared legacy home; the same preparation the terminal resume
@@ -43,6 +54,9 @@ export async function resumeAiVaultSessionInNewChat(
     const launch = beginStructuredAgentSessionProvisionalLaunch({
       plan,
       hooks: {},
+      ...(replacing
+        ? { afterTabId: replacing.afterTabId, focusIntent: replacing.focusIntent }
+        : {}),
       beforeOpen: () => {
         if (useAppStore.getState().activeWorktreeId !== worktreeId) {
           return activateAiVaultResumeWorkspace(worktreeId)
@@ -55,6 +69,7 @@ export async function resumeAiVaultSessionInNewChat(
         if (settlement.kind === 'failed' && !settlement.notified) {
           notifyAiVaultSessionResumeInChatFailure(settlement.error, rowAgent)
         }
+        replacing?.onSettled(settlement)
       })
     }
   } catch (error) {

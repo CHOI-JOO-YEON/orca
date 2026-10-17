@@ -56,7 +56,8 @@ export default function AiVaultPanel({
   initialQuery = '',
   initialAgents,
   headerAction,
-  onSessionOpened
+  onSessionOpened,
+  resumeHere
 }: AiVaultPanelProps): React.JSX.Element {
   const {
     workspaceId: activeWorktreeId,
@@ -348,6 +349,7 @@ export default function AiVaultPanel({
             onToggleGroup={toggleGroup}
             keyboardRef={keyboardRows ? listKeyboardRef : undefined}
             query={query}
+            resumeHere={resumeHere}
             onJumpToOriginalPane={(session) =>
               void paneActions.jumpToOriginalPane(session).then((opened) => {
                 if (opened) {

@@ -66,7 +66,8 @@ export function AiVaultVirtualRow({
   onRequestDelete,
   searchHits,
   selected,
-  onSelect
+  onSelect,
+  onPickSession
 }: {
   row: AiVaultListRow | undefined
   index: number
@@ -103,6 +104,8 @@ export function AiVaultVirtualRow({
   /** Set only where rows are keyboard-selectable. */
   selected?: boolean
   onSelect?: () => void
+  /** Set in `/resume`'s picker; see VaultSessionRow's `onPick`. */
+  onPickSession?: (session: AiVaultSession) => void
 }): React.JSX.Element | null {
   if (!row) {
     return null
@@ -222,6 +225,14 @@ export function AiVaultVirtualRow({
             onSelect?.()
             onToggleSessionDetails(row.session.id)
           }}
+          onPick={
+            onPickSession
+              ? () => {
+                  onSelect?.()
+                  onPickSession(row.session)
+                }
+              : undefined
+          }
           onJumpToOriginalPane={
             canJumpToOriginalPane ? () => onJumpToOriginalPane(row.session) : undefined
           }

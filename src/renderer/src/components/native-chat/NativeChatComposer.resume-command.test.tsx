@@ -148,6 +148,7 @@ describe('/resume in the native chat composer', () => {
 
     expect(mocks.openHistory).toHaveBeenCalledWith({
       workspace: { worktreeId: 'wt-structured' },
+      chatTabId: 'tab-1',
       initialQuery: 'auth retry',
       agent: 'claude'
     })

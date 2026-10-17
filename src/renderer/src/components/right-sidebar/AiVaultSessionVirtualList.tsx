@@ -24,6 +24,7 @@ import type { AiVaultResumeInChatEligibility } from './ai-vault-session-resume-i
 import { AiVaultVirtualRow, type AiVaultListRow } from './AiVaultVirtualRow'
 import type { AiVaultSearchHit } from '../../../../shared/ai-vault-search-types'
 import { resolveAiVaultSessionRowChatActions } from './ai-vault-session-chat-action'
+import { resumeAiVaultSessionHere, type AiVaultResumeHere } from './ai-vault-session-resume-here'
 import {
   useAiVaultSessionListKeyboard,
   useAiVaultSessionSelection,
@@ -67,7 +68,8 @@ export function AiVaultSessionVirtualList({
   onRequestDelete,
   searchHits,
   keyboardRef,
-  query = ''
+  query = '',
+  resumeHere
 }: {
   groups: readonly AiVaultSessionListGroup[]
   collapsedGroups: ReadonlySet<string>
@@ -106,6 +108,8 @@ export function AiVaultSessionVirtualList({
   keyboardRef?: Ref<AiVaultSessionListKeyboard>
   /** The search text; editing it moves the keyboard selection back to the top match. */
   query?: string
+  /** Set in `/resume`: picking a row resumes it in that chat, and rows offer no other action. */
+  resumeHere?: AiVaultResumeHere
 }): React.JSX.Element {
   const listScrollRef = useRef<HTMLDivElement>(null)
   const stickyRangeStartIndexRef = useRef(0)
@@ -178,23 +182,24 @@ export function AiVaultSessionVirtualList({
     })
   }, [])
 
-  // Enter takes the row's best offer: switch, chat, then its own ▶; details when it offers none.
-  const activateSession = (session: AiVaultSession, index: number): void => {
-    const actions = resolveAiVaultSessionRowChatActions({
+  const pickHere = (session: AiVaultSession): boolean =>
+    resumeHere !== undefined &&
+    resumeAiVaultSessionHere({
       session,
-      originalPaneTarget: getOriginalPaneTarget(session),
-      structuredSessionOpen: isStructuredSessionOpen(session),
-      resumeState: getSessionResumeState(session),
-      resumeInChat: getSessionResumeInChat(session),
-      searchHit: searchHits?.get(session.id)
+      here: resumeHere,
+      actions: resolveAiVaultSessionRowChatActions({
+        session,
+        originalPaneTarget: getOriginalPaneTarget(session),
+        structuredSessionOpen: isStructuredSessionOpen(session),
+        resumeState: getSessionResumeState(session),
+        resumeInChat: getSessionResumeInChat(session),
+        searchHit: searchHits?.get(session.id)
+      }),
+      jump: onJumpToOriginalPane
     })
-    if (actions.canJumpToOriginalPane) {
-      onJumpToOriginalPane(session)
-    } else if (actions.resumeInNewChatWorkspaceId) {
-      onResumeInNewChat(session, actions.resumeInNewChatWorkspaceId)
-    } else if (actions.resumeWorktreeId) {
-      onResume(session, actions.resumeWorktreeId)
-    } else {
+  // Enter resumes the row in the chat; a row that can't shows its details instead.
+  const activateSession = (session: AiVaultSession, index: number): void => {
+    if (!pickHere(session)) {
       setExpandedSessionIds((current) => new Set(current).add(session.id))
       virtualizer.scrollToIndex(index)
     }
@@ -288,6 +293,15 @@ export function AiVaultSessionVirtualList({
                 onRequestDelete={onRequestDelete}
                 selected={keyboardRef ? virtualRow.index === selectedIndex : undefined}
                 onSelect={keyboardRef ? () => selection.select(virtualRow.index) : undefined}
+                onPickSession={
+                  resumeHere
+                    ? (session) => {
+                        if (!pickHere(session)) {
+                          toggleSessionDetails(session.id)
+                        }
+                      }
+                    : undefined
+                }
               />
             ))}
           </div>

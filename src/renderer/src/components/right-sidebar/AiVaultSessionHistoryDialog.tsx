@@ -53,7 +53,7 @@ export default function AiVaultSessionHistoryDialog(): React.JSX.Element | null 
         showCloseButton={false}
         aria-describedby={undefined}
         surface="panel"
-        className="flex h-[min(640px,calc(100vh-4rem))] flex-col overflow-hidden sm:max-w-[480px]"
+        className="flex h-[min(640px,calc(100vh-4rem))] flex-col overflow-hidden sm:max-w-[560px]"
         onOpenAutoFocus={(event) => {
           event.preventDefault()
           panelRef.current?.focusSearch()
@@ -87,6 +87,12 @@ export default function AiVaultSessionHistoryDialog(): React.JSX.Element | null 
             // An agent the filter doesn't list leaves every agent shown rather than none.
             initialAgents={request.agent ? aiVaultHistoryAgents(request.agent) : AI_VAULT_AGENTS}
             onSessionOpened={closeModal}
+            resumeHere={{
+              tabId: request.chatTabId,
+              workspaceId: request.workspace.worktreeId,
+              agent: request.agent,
+              dismiss: closeModal
+            }}
             headerAction={
               <DialogClose asChild>
                 <Button

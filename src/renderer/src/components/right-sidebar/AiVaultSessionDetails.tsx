@@ -48,7 +48,8 @@ export function SessionInlineDetails({
   onContinueInNewSession,
   onResumeInNewChat,
   onResumeInNewCli,
-  onOpenLog
+  onOpenLog,
+  actionsHidden = false
 }: {
   id: string
   session: AiVaultSession
@@ -65,6 +66,8 @@ export function SessionInlineDetails({
   onResumeInNewChat?: () => void
   onResumeInNewCli?: () => void
   onOpenLog?: () => void
+  /** Hides the action bar; the details stay. */
+  actionsHidden?: boolean
 }): React.JSX.Element {
   // A zero-turn transcript would resume into an empty conversation, so the plain
   // resume affordances are withheld and a distinct "not saved" state is shown.
@@ -90,12 +93,13 @@ export function SessionInlineDetails({
         event.stopPropagation()
       }}
     >
-      {showResumeInWorktree ||
-      showResumeInNewTab ||
-      onContinueInNewSession ||
-      onResumeInNewChat ||
-      onResumeInNewCli ||
-      onOpenLog ? (
+      {!actionsHidden &&
+      (showResumeInWorktree ||
+        showResumeInNewTab ||
+        onContinueInNewSession ||
+        onResumeInNewChat ||
+        onResumeInNewCli ||
+        onOpenLog) ? (
         <div className="flex flex-wrap items-center gap-1.5 border-b border-sidebar-border/80 bg-sidebar-accent/15 px-3 py-2">
           {showResumeInWorktree ? (
             <Button

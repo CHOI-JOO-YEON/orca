@@ -40,6 +40,7 @@ export function openStructuredAgentSessionProvisionalTab(args: {
   sessionId: string
   agent: TuiAgent
   targetGroupId?: string
+  afterTabId?: string
   activate?: boolean
 }): Tab {
   const state = useAppStore.getState()
@@ -65,6 +66,7 @@ export function openStructuredAgentSessionProvisionalTab(args: {
     agentSessionAgent: args.agent,
     label: defaultAgentChatLabel(args.agent),
     ...(args.targetGroupId ? { targetGroupId: args.targetGroupId } : {}),
+    ...(args.afterTabId ? { afterTabId: args.afterTabId } : {}),
     activate: args.activate !== false
   })
   if (args.activate !== false) {
@@ -96,6 +98,8 @@ type ProvisionalLaunchArgs = {
   focusIntent?: NativeChatComposerFocusIntent
   target?: AgentSessionLaunchTarget
   targetGroupId?: string
+  /** The tab the chat opens right after, in that tab's group. */
+  afterTabId?: string
   activate?: boolean
   /** Lets workspace flows reveal before the chat's tab is owned: before its host is asked, when no
    *  session id exists yet. */
@@ -201,6 +205,7 @@ function beginLocalProvisionalLaunch(args: ProvisionalLaunchArgs): LocalProvisio
       sessionId: handle.sessionId,
       agent: args.plan.agent,
       ...(args.targetGroupId ? { targetGroupId: args.targetGroupId } : {}),
+      ...(args.afterTabId ? { afterTabId: args.afterTabId } : {}),
       ...(args.activate !== undefined ? { activate: args.activate } : {})
     })
     return { ...handle, tab }

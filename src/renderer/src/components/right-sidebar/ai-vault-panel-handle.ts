@@ -1,6 +1,7 @@
 import { useImperativeHandle, type ReactNode, type Ref } from 'react'
 import type { AiVaultAgent, AiVaultScope } from '../../../../shared/ai-vault-types'
 import type { AiVaultPanelWorkspace } from './ai-vault-panel-workspace'
+import type { AiVaultResumeHere } from './ai-vault-session-resume-here'
 
 export type AiVaultPanelHandle = {
   /** Focuses the search box, first switching scope when one is given. */
@@ -21,6 +22,8 @@ export type AiVaultPanelProps = {
   /** Fires when a switch to an open session or a hand-off succeeds, which may leave the visible tab
    *  as it was; its presence also turns on arrow/Enter row keys. */
   onSessionOpened?: () => void
+  /** Set in `/resume`: picking a row resumes it in that chat, and rows offer no other action. */
+  resumeHere?: AiVaultResumeHere
 }
 
 export function useAiVaultPanelHandle(

@@ -71,6 +71,7 @@ function renderRow(
     onResume?: () => void
     resumeHidden?: boolean
     onRequestDelete?: () => void
+    onPick?: () => void
   } = {}
 ) {
   return render(
@@ -101,6 +102,7 @@ function renderRow(
         onCopyId={vi.fn()}
         onCopyPath={vi.fn()}
         onRequestDelete={overrides.onRequestDelete ?? vi.fn()}
+        onPick={overrides.onPick}
       />
     </TooltipProvider>
   )
@@ -144,6 +146,28 @@ describe('VaultSessionRow details toggle', () => {
     await user.click(title as Element)
 
     expect(onToggleDetails).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('VaultSessionRow in the /resume picker', () => {
+  it('only resumes on click: no menus, drag or action buttons, and the chevron still shows details', async () => {
+    const onPick = vi.fn()
+    const onToggleDetails = vi.fn()
+    const { container } = renderRow({ onPick, onToggleDetails, detailsExpanded: true })
+    const user = userEvent.setup()
+
+    expect(screen.getByText('Latest turns')).toBeTruthy()
+    expect(screen.queryByTestId('ai-vault-session-more-actions')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Resume in New Tab' })).toBeNull()
+    expect(container.querySelector('[draggable="true"]')).toBeNull()
+    const title = screen.getAllByText('A session')[0]
+    fireEvent.contextMenu(title)
+    expect(screen.queryByRole('menuitem')).toBeNull()
+
+    await user.click(title)
+    await user.click(screen.getByTestId('ai-vault-session-toggle-details'))
+    expect(onPick).toHaveBeenCalledOnce()
+    expect(onToggleDetails).toHaveBeenCalledOnce()
   })
 })
 
