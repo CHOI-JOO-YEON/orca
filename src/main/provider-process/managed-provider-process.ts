@@ -104,8 +104,11 @@ export function spawnManagedProviderProcess(
   const exitProof = new RetryableProcessExitProof(options.acceptClose ?? acceptProviderRootExit)
   let stderrTail = ''
   let stderrLine = ''
-  const retainLine = (line: string): void => {
-    if (line && !options.onStderrLine?.(line)) {
+  let lineCut = false
+  // A line cut at the cap was classified on its prefix only, so an unrecognised one is dropped,
+  // not kept: whatever follows the prefix (a sign-in URL) must never reach the tail.
+  const retainLine = (line: string, cut: boolean): void => {
+    if (line && !options.onStderrLine?.(line) && !cut) {
       stderrTail = `${stderrTail}${line}\n`.slice(-STDERR_TAIL_MAX_CHARS)
     }
   }
@@ -113,15 +116,17 @@ export function spawnManagedProviderProcess(
   child.stderr.setEncoding('utf8').on('data', (chunk: string) => {
     if (options.onStderrLine) {
       const lines = (stderrLine + chunk).split('\n')
+      const pending = lines.pop() ?? ''
       // Keep the prompt prefix until the complete line can be classified.
-      stderrLine = (lines.pop() ?? '').slice(0, STDERR_TAIL_MAX_CHARS)
-      lines.forEach(retainLine)
+      lines.forEach((line, index) => retainLine(line, index === 0 && lineCut))
+      lineCut = (lines.length === 0 && lineCut) || pending.length > STDERR_TAIL_MAX_CHARS
+      stderrLine = pending.slice(0, STDERR_TAIL_MAX_CHARS)
     } else {
       stderrTail = (stderrTail + chunk).slice(-STDERR_TAIL_MAX_CHARS)
     }
     options.onOutput?.()
   })
-  child.stderr.once('end', () => retainLine(stderrLine))
+  child.stderr.once('end', () => retainLine(stderrLine, lineCut))
   if (options.onOutput) {
     observeReaderOutput(child.stdout, options.onOutput)
   }

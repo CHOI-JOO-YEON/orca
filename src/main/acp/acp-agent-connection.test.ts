@@ -156,6 +156,16 @@ describe('ACP process-owning connection', () => {
     expect(said.join('\n')).not.toMatch(/s3cret|accounts\.example/)
   })
 
+  it('drops an overlong stderr line it could not classify instead of keeping its prefix', async () => {
+    const { connection, child } = fixture({ signInPrompt: (line) => line.endsWith('authenticate') })
+    await connection.start(start)
+    const link = `https://accounts.example/auth?state=${'x'.repeat(9000)}`
+    child.stderr.write(`warming up\nplease visit ${link}`)
+    child.stderr.write('s3cret\nready\n')
+    await vi.waitFor(() => expect(connection.stderrTail()).toContain('ready'))
+    expect(connection.stderrTail()).toBe('warming up\nready')
+  })
+
   it('keeps cancel writable after stdout EOF and waits for process exit evidence', async () => {
     const onClose = vi.fn()
     const onExit = vi.fn()
