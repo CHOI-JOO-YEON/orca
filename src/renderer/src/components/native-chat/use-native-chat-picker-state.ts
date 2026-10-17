@@ -3,6 +3,7 @@ import {
   useCallback,
   useEffect,
   useId,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -77,7 +78,9 @@ export function useNativeChatPickerState(args: {
   } = args
   const profile = useMemo(() => getNativeChatAgentProfile(agent), [agent])
   const disabledRef = useRef(disabled)
-  disabledRef.current = disabled
+  useLayoutEffect(() => {
+    disabledRef.current = disabled
+  }, [disabled])
   const skillPickerTriggered = !disabled && isSkillPickerTriggered(draft.slice(0, caret), profile)
   const discovery = useNativeChatSkills(agent, terminalTabId, skillPickerTriggered)
   const listboxId = `native-chat-picker-${useId().replaceAll(':', '')}`
