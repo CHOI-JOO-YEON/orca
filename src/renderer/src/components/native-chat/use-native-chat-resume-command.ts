@@ -60,15 +60,19 @@ export function useNativeChatResumeCommand(args: {
   terminalTabId: string
   /** `isPickedSkill`: a skill row the user picked keeps going to the agent, even one named `resume`. */
   picker: Pick<NativeChatPickerState, 'autocomplete' | 'isPickedSkill' | 'clearSkillOrigin'>
-  textareaRef: RefObject<NativeChatComposerInput | null>
-  setDraft: (value: string) => void
-  setCaret: Dispatch<SetStateAction<number>>
-  setActiveSuggestion: Dispatch<SetStateAction<number>>
+  /** The composer's input and the state a consumed draft resets. */
+  editor: {
+    textareaRef: RefObject<NativeChatComposerInput | null>
+    setDraft: (value: string) => void
+    setCaret: Dispatch<SetStateAction<number>>
+    setActiveSuggestion: Dispatch<SetStateAction<number>>
+  }
   setNotice: (notice: string | null) => void
 }): NativeChatResumeCommand {
   const { structuredTransport, agent, terminalTabId } = args
   const { autocomplete, isPickedSkill, clearSkillOrigin } = args.picker
-  const { textareaRef, setDraft, setCaret, setActiveSuggestion, setNotice } = args
+  const { textareaRef, setDraft, setCaret, setActiveSuggestion } = args.editor
+  const { setNotice } = args
   const structured = structuredTransport !== undefined
   const structuredWorktreeId = structuredTransport?.worktreeId
 

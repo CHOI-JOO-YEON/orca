@@ -114,6 +114,7 @@ const NativeChatComposerPane = forwardRef<NativeChatComposerHandle, NativeChatCo
       agent,
       structuredTransport
     )
+    const editor = { textareaRef, setDraft, setCaret, setActiveSuggestion }
     const picker = useNativeChatPickerState({
       agent,
       terminalTabId,
@@ -123,10 +124,7 @@ const NativeChatComposerPane = forwardRef<NativeChatComposerHandle, NativeChatCo
       agentCommands,
       recalledFromHistory: recall.active,
       sessionSkillNames,
-      textareaRef,
-      setDraft,
-      setCaret,
-      setActiveSuggestion
+      ...editor
     })
     const {
       autocomplete,
@@ -142,10 +140,7 @@ const NativeChatComposerPane = forwardRef<NativeChatComposerHandle, NativeChatCo
       agent,
       terminalTabId,
       picker,
-      textareaRef,
-      setDraft,
-      setCaret,
-      setActiveSuggestion,
+      editor,
       setNotice
     })
     const mentionFiles = useNativeChatMentionFiles({
