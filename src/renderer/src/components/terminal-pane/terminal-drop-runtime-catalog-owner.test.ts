@@ -90,7 +90,11 @@ async function drop(lane: string, workspaceId: string, executionHostId: Executio
   const sendInput = vi.fn(() => true)
   const pane = { id: 1, leafId: 'leaf-1', terminal: { focus: vi.fn() } }
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: Drops only enumerate this pane and capture its identity.
-  const manager = { getPanes: () => [pane], getActivePane: () => pane } as never
+  const manager = {
+    getPanes: () => [pane],
+    getActivePane: () => pane,
+    setActivePane: vi.fn()
+  } as never
   const transport = {
     sendInput,
     getPtyId: () => 'runtime-pty-1',

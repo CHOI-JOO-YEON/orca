@@ -132,11 +132,12 @@ describe('handleInternalTerminalFileDrop', () => {
 
   it('pastes every selected internal file path with shell spacing', async () => {
     const sendInput = vi.fn(() => true)
-    const focus = vi.fn()
-    const pane = { id: 1, leafId: 'leaf-1', terminal: { focus } }
+    const setActivePane = vi.fn()
+    const pane = { id: 1, leafId: 'leaf-1', terminal: { focus: vi.fn() } }
     const manager = {
       getActivePane: () => pane,
-      getPanes: () => [pane]
+      getPanes: () => [pane],
+      setActivePane
     }
     const paths = ['/repo/a.ts', '/repo/my file.ts']
 
@@ -158,7 +159,7 @@ describe('handleInternalTerminalFileDrop', () => {
       ["'/repo/my file.ts' ", 'driving']
     ])
     expect(mocks.recordTerminalUserInputForLeaf).toHaveBeenCalledWith('tab-1', 'leaf-1')
-    expect(focus).toHaveBeenCalled()
+    expect(setActivePane).toHaveBeenCalledWith(1)
   })
 
   it('stops internal file-drop paste when the target transport changes between paths', async () => {
@@ -170,11 +171,12 @@ describe('handleInternalTerminalFileDrop', () => {
       paneTransports.set(1, replacementTransport)
       return true
     })
-    const focus = vi.fn()
-    const pane = { id: 1, leafId: 'leaf-1', terminal: { focus } }
+    const setActivePane = vi.fn()
+    const pane = { id: 1, leafId: 'leaf-1', terminal: { focus: vi.fn() } }
     const manager = {
       getActivePane: () => pane,
-      getPanes: () => [pane]
+      getPanes: () => [pane],
+      setActivePane
     }
     const originalTransport = createTerminalTransport(sendInput, 'pty-1', sendInputAccepted)
     paneTransports.set(1, originalTransport)
@@ -199,18 +201,19 @@ describe('handleInternalTerminalFileDrop', () => {
     expect(sendInput).not.toHaveBeenCalled()
     expect(replacementSendInput).not.toHaveBeenCalled()
     expect(mocks.recordTerminalUserInputForLeaf).toHaveBeenCalledWith('tab-1', 'leaf-1')
-    expect(focus).not.toHaveBeenCalled()
+    expect(setActivePane).not.toHaveBeenCalled()
     expect(mocks.toastError).not.toHaveBeenCalled()
   })
 
   it('uses acknowledged PTY writes for internal file drops when available', async () => {
     const sendInput = vi.fn(() => true)
     const sendInputAccepted = vi.fn(async () => true)
-    const focus = vi.fn()
-    const pane = { id: 1, leafId: 'leaf-1', terminal: { focus } }
+    const setActivePane = vi.fn()
+    const pane = { id: 1, leafId: 'leaf-1', terminal: { focus: vi.fn() } }
     const manager = {
       getActivePane: () => pane,
-      getPanes: () => [pane]
+      getPanes: () => [pane],
+      setActivePane
     }
 
     const result = await handleInternalTerminalFileDrop({
@@ -233,7 +236,7 @@ describe('handleInternalTerminalFileDrop', () => {
     })
     expect(sendInput).not.toHaveBeenCalled()
     expect(mocks.recordTerminalUserInputForLeaf).toHaveBeenCalledWith('tab-1', 'leaf-1')
-    expect(focus).toHaveBeenCalled()
+    expect(setActivePane).toHaveBeenCalledWith(1)
   })
 
   it('does not paste internal paths when connection metadata is not hydrated', async () => {
@@ -243,11 +246,12 @@ describe('handleInternalTerminalFileDrop', () => {
       repo1: [{ id: 'wt-1', repoId: 'repo1', path: '/repo', hostId: '' }]
     }
     const sendInput = vi.fn(() => true)
-    const focus = vi.fn()
-    const pane = { id: 1, leafId: 'leaf-1', terminal: { focus } }
+    const setActivePane = vi.fn()
+    const pane = { id: 1, leafId: 'leaf-1', terminal: { focus: vi.fn() } }
     const manager = {
       getActivePane: () => pane,
-      getPanes: () => [pane]
+      getPanes: () => [pane],
+      setActivePane
     }
 
     const result = await handleInternalTerminalFileDrop({
@@ -264,7 +268,7 @@ describe('handleInternalTerminalFileDrop', () => {
 
     expect(result).toEqual({ status: 'ignored', reason: 'worktree-unavailable' })
     expect(sendInput).not.toHaveBeenCalled()
-    expect(focus).not.toHaveBeenCalled()
+    expect(setActivePane).not.toHaveBeenCalled()
     expect(mocks.recordTerminalUserInputForLeaf).not.toHaveBeenCalled()
     expect(mocks.toastError).toHaveBeenCalledWith('Worktree not ready — try again in a moment.')
   })
@@ -289,11 +293,12 @@ describe('handleInternalTerminalFileDrop', () => {
       ]
     }
     const sendInput = vi.fn(() => true)
-    const focus = vi.fn()
-    const pane = { id: 1, leafId: 'leaf-1', terminal: { focus } }
+    const setActivePane = vi.fn()
+    const pane = { id: 1, leafId: 'leaf-1', terminal: { focus: vi.fn() } }
     const manager = {
       getActivePane: () => pane,
-      getPanes: () => [pane]
+      getPanes: () => [pane],
+      setActivePane
     }
 
     const result = await handleInternalTerminalFileDrop({
@@ -334,11 +339,12 @@ describe('handleInternalTerminalFileDrop', () => {
     }
     mocks.storeState.sshConnectionStates = new Map([['ssh-linux', { remotePlatform: 'linux' }]])
     const sendInput = vi.fn(() => true)
-    const focus = vi.fn()
-    const pane = { id: 1, leafId: 'leaf-1', terminal: { focus } }
+    const setActivePane = vi.fn()
+    const pane = { id: 1, leafId: 'leaf-1', terminal: { focus: vi.fn() } }
     const manager = {
       getActivePane: () => pane,
-      getPanes: () => [pane]
+      getPanes: () => [pane],
+      setActivePane
     }
 
     const result = await handleInternalTerminalFileDrop({
@@ -356,30 +362,30 @@ describe('handleInternalTerminalFileDrop', () => {
     expect(result).toEqual({ status: 'pasted', pathCount: 1 })
     expect(sendInput).toHaveBeenCalledWith("'/remote/repo/it'\\''s here.txt' ", 'driving')
     expect(mocks.recordTerminalUserInputForLeaf).toHaveBeenCalledWith('tab-1', 'leaf-1')
-    expect(focus).toHaveBeenCalled()
+    expect(setActivePane).toHaveBeenCalledWith(1)
   })
 
   it('pastes internal paths into the pane under the drop target instead of the active pane', async () => {
     const activeSendInput = vi.fn(() => true)
     const targetSendInput = vi.fn(() => true)
-    const activeFocus = vi.fn()
-    const targetFocus = vi.fn()
+    const setActivePane = vi.fn()
     const dropTarget = document.createElement('div')
     const activePane = {
       id: 1,
       leafId: 'leaf-active',
-      terminal: { focus: activeFocus },
+      terminal: { focus: vi.fn() },
       container: { contains: vi.fn(() => false) }
     }
     const targetPane = {
       id: 2,
       leafId: 'leaf-target',
-      terminal: { focus: targetFocus },
+      terminal: { focus: vi.fn() },
       container: { contains: vi.fn((target) => target === dropTarget) }
     }
     const manager = {
       getActivePane: () => activePane,
-      getPanes: () => [activePane, targetPane]
+      getPanes: () => [activePane, targetPane],
+      setActivePane
     }
 
     const result = await handleInternalTerminalFileDrop({
@@ -399,19 +405,19 @@ describe('handleInternalTerminalFileDrop', () => {
 
     expect(result).toEqual({ status: 'pasted', pathCount: 1 })
     expect(activeSendInput).not.toHaveBeenCalled()
-    expect(activeFocus).not.toHaveBeenCalled()
     expect(targetSendInput).toHaveBeenCalledWith('/repo/drop-target.ts ', 'driving')
-    expect(targetFocus).toHaveBeenCalled()
+    expect(setActivePane).toHaveBeenCalledWith(2)
     expect(mocks.recordTerminalUserInputForLeaf).toHaveBeenCalledWith('tab-1', 'leaf-target')
   })
 
   it('rejects too many internal paths before writing terminal input', async () => {
     const sendInput = vi.fn(() => true)
-    const focus = vi.fn()
-    const pane = { id: 1, leafId: 'leaf-1', terminal: { focus } }
+    const setActivePane = vi.fn()
+    const pane = { id: 1, leafId: 'leaf-1', terminal: { focus: vi.fn() } }
     const manager = {
       getActivePane: () => pane,
-      getPanes: () => [pane]
+      getPanes: () => [pane],
+      setActivePane
     }
     const paths = Array.from({ length: 257 }, (_value, index) =>
       ['/repo/secret-', String(index), '.txt'].join('')
@@ -431,7 +437,7 @@ describe('handleInternalTerminalFileDrop', () => {
 
     expect(result).toEqual({ status: 'rejected', reason: 'too-many-paths' })
     expect(sendInput).not.toHaveBeenCalled()
-    expect(focus).not.toHaveBeenCalled()
+    expect(setActivePane).not.toHaveBeenCalled()
     expect(mocks.toastError).toHaveBeenCalledWith(
       'Drop contains too many paths for a safe terminal paste.'
     )
@@ -446,10 +452,10 @@ it('refuses an unresolvable workspace instead of using the dropped path as its r
     { id: 'repo1', path: '/repo', executionHostId: 'local', connectionId: null }
   ]
   const sendInput = vi.fn(() => true)
-  const focus = vi.fn()
-  const pane = { id: 1, leafId: 'leaf-1', terminal: { focus } }
+  const setActivePane = vi.fn()
+  const pane = { id: 1, leafId: 'leaf-1', terminal: { focus: vi.fn() } }
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: This fixture supplies every manager method used by internal drops.
-  const manager = { getPanes: () => [pane], getActivePane: () => pane } as never
+  const manager = { getPanes: () => [pane], setActivePane, getActivePane: () => pane } as never
   const result = await handleInternalTerminalFileDrop({
     manager,
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: This fixture supplies every transport method used by local drops.
@@ -464,5 +470,5 @@ it('refuses an unresolvable workspace instead of using the dropped path as its r
   })
   expect(result).toEqual({ status: 'ignored', reason: 'worktree-unavailable' })
   expect(sendInput).not.toHaveBeenCalled()
-  expect(focus).not.toHaveBeenCalled()
+  expect(setActivePane).not.toHaveBeenCalled()
 })

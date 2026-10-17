@@ -38,10 +38,10 @@ describe('local terminals without catalog workspaces', () => {
     'preserves %s floating-terminal drops while a runtime is focused',
     async (lane) => {
       const sendInput = vi.fn(() => true)
-      const focus = vi.fn()
-      const pane = { id: 1, leafId: 'leaf-1', terminal: { focus } }
+      const setActivePane = vi.fn()
+      const pane = { id: 1, leafId: 'leaf-1', terminal: { focus: vi.fn() } }
       // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: The handler only enumerates panes and captures their identity.
-      const manager = { getPanes: () => [pane], getActivePane: () => pane } as never
+      const manager = { getPanes: () => [pane], getActivePane: () => pane, setActivePane } as never
       // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: The fixture supplies every transport method used by local drops.
       const paneTransports = new Map([
         [
@@ -83,7 +83,7 @@ describe('local terminals without catalog workspaces', () => {
         expect(result).toEqual({ status: 'pasted', pathCount: 1 })
       }
       expect(sendInput).toHaveBeenCalledExactlyOnceWith('/local/file.txt ', 'driving')
-      expect(focus).toHaveBeenCalledTimes(lane === 'internal' ? 1 : 0)
+      expect(setActivePane).toHaveBeenCalledTimes(lane === 'internal' ? 1 : 0)
       expect(mocks.importPaths).not.toHaveBeenCalled()
       expect(mocks.resolvePaths).not.toHaveBeenCalled()
     }
