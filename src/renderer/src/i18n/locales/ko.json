@@ -19187,7 +19187,6 @@
       "cancel": "설치 취소",
       "cancelled": "설치가 취소되었습니다.",
       "cancelling": "취소하는 중…",
-      "chatTitle": "채팅을 시작하려면 {{agent}}을(를) 설치하세요.",
       "damaged": "이 {{agent}} 사본이 손상되었습니다.",
       "downloadSize": "{{size}}MB 다운로드.",
       "downloading": "{{done}}MB 다운로드 중입니다.",

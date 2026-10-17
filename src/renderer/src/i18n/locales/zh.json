@@ -19187,7 +19187,6 @@
       "cancel": "取消安装",
       "cancelled": "已取消安装。",
       "cancelling": "正在取消…",
-      "chatTitle": "安装 {{agent}} 即可开始聊天。",
       "damaged": "此 {{agent}} 副本已损坏。",
       "downloadSize": "下载大小 {{size}} MB。",
       "downloading": "正在下载 {{done}} MB。",

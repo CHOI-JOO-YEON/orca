@@ -19187,7 +19187,6 @@
       "cancel": "インストールをキャンセル",
       "cancelled": "インストールをキャンセルしました。",
       "cancelling": "キャンセルしています…",
-      "chatTitle": "チャットを始めるには {{agent}} をインストールしてください。",
       "damaged": "この {{agent}} のコピーは破損しています。",
       "downloadSize": "{{size}} MB のダウンロード。",
       "downloading": "{{done}} MB をダウンロード中です。",

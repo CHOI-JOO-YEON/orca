@@ -19400,7 +19400,6 @@
       "cancel": "Cancel installation",
       "cancelled": "Installation cancelled.",
       "cancelling": "Cancelling…",
-      "chatTitle": "Install {{agent}} to start chatting.",
       "damaged": "This copy of {{agent}} is damaged.",
       "downloadSize": "{{size}} MB download.",
       "downloading": "Downloading {{done}} MB.",
