@@ -3,6 +3,7 @@ import { act, create, type ReactTestRenderer } from 'react-test-renderer'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { NativeChatMessage } from '../../../src/shared/native-chat-types'
 import type { RpcClient } from '../transport/rpc-client'
+import { createFakeRpcClient, rpcSuccess } from '../mobile-web-shell/bridge-host-test-fakes'
 import {
   useMobileNativeChatSession,
   type MobileNativeChatSession
@@ -62,12 +63,12 @@ describe('useMobileNativeChatSession', () => {
         onData({ type: 'snapshot', messages: [cached, partial], hasMore: true })
         return () => {}
       }
-      const sendRequest = vi.fn(async () => ({ ok: true, result: { messages: response } }))
+      const sendRequest = async () => rpcSuccess('older', { messages: response })
       let land = () => {}
       const settled = new Promise<void>((resolve) => {
         land = resolve
       })
-      await mount({ subscribe, sendRequest } as unknown as RpcClient)
+      await mount({ ...createFakeRpcClient(), subscribe, sendRequest })
       await act(async () => {
         state?.loadEarlier(() => settled)
       })
