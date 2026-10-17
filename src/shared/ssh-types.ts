@@ -69,9 +69,12 @@ export type SshTarget = {
   /** Grace period in seconds before relay shuts down after disconnect.
    *  0 disables expiry. Default: 0 (until reset). Max: 604800 (7 days). */
   relayGracePeriodSeconds?: number
-  /** Lets this host's relayed `orca` CLI control this Orca beyond its own terminals (other hosts,
-   *  orchestration, files). Off by default: the host is a guest, not an owner. */
+  /** Lets this host's `orca` CLI drive this desktop's Orca browser tabs in the host's own
+   *  workspaces (desktop browser bridge) and its relay-era terminals' orchestration commands.
+   *  On unless explicitly `false`; read it through `isRemoteCliControlAllowed`. */
   allowRemoteCliControl?: boolean
+  /** Retired: written by earlier builds and ignored now. Kept so a downgrade still finds its stamp. */
+  allowRemoteCliControlConsent?: 'desktop-browser-bridge'
   /** Set to true after a successful connection that triggered a credential
    *  prompt (passphrase or password). Persisted so startup reconnect can
    *  partition targets into eager (no passphrase) vs deferred (passphrase)
@@ -317,6 +320,11 @@ export type SshManagedServerStatus =
       serving?: SshManagedServerServingNote
       /** Set on the connect that moved this host's projects, when some were linked instead. */
       linked?: SshManagedServerLinkedProject[]
+      /**
+       * macOS 15+: the SSH session that started this server proved exited, so its terminals may
+       * have lost Local Network access (#25934). Absent when unknown, e.g. an older launch.
+       */
+      launchSessionEnded?: true
     }
   | { kind: 'setting-up'; phase: (typeof SSH_MANAGED_SERVER_PHASES)[number] }
   /** `detail` names the blocker for a refusal, or why orcad can't run on the host. */
@@ -332,6 +340,8 @@ export type SshManagedServerStatus =
       canLeaveBehind?: true
       /** A move to the managed server stopped short and keeps the host locked until it resumes. */
       held?: true
+      /** COMPAT(legacy-relay-bridge): the connect stayed up so the bridge serves those terminals. */
+      bridged?: true
     }
 
 /** Plain SSH terminals and SFTP browsing only; `reason` is the ladder's classified cause. */

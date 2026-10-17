@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PaneManager } from '@/lib/pane-manager/pane-manager'
 import { layoutOwnerPaneGestures } from './terminal-pane-layout-owner-gestures'
-import type { sendPaneCommandToLayoutOwner } from './terminal-pane-layout-owner-commands'
+import type { sendLayoutCommandToOwner } from '@/runtime/layout-owner-command'
 
 const mocks = vi.hoisted(() => ({
   root: {
@@ -11,11 +11,11 @@ const mocks = vi.hoisted(() => ({
     first: { type: 'leaf', leafId: 'leaf-1' },
     second: { type: 'leaf', leafId: 'leaf-2' }
   },
-  send: vi.fn<typeof sendPaneCommandToLayoutOwner>()
+  send: vi.fn<typeof sendLayoutCommandToOwner>()
 }))
 
-vi.mock('./terminal-pane-layout-owner-commands', () => ({
-  sendPaneCommandToLayoutOwner: mocks.send
+vi.mock('@/runtime/layout-owner-command', () => ({
+  sendLayoutCommandToOwner: mocks.send
 }))
 vi.mock('@/store', () => ({
   useAppStore: { getState: () => ({ terminalLayoutsByTabId: { 'tab-1': { root: mocks.root } } }) }
@@ -55,6 +55,7 @@ describe('layoutOwnerPaneGestures', () => {
       {
         apply: expect.any(Function),
         asToday: expect.any(Function),
+        unapplied: expect.any(Function),
         refused: expect.any(Function)
       }
     )
@@ -64,8 +65,17 @@ describe('layoutOwnerPaneGestures', () => {
     expect(move).toHaveBeenCalledOnce()
   })
 
-  it.each(['asToday', 'refused'] as const)(
-    'moves the pane as today when main answers %s',
+  it('moves the pane as today when main answers as today', () => {
+    const move = vi.fn()
+    gestures().takePaneDrop?.({ sourcePaneId: 2, targetPaneId: 1, zone: 'left' }, move)
+
+    mocks.send.mock.calls[0]?.[2].asToday()
+
+    expect(move).toHaveBeenCalledOnce()
+  })
+
+  it.each(['refused', 'unapplied'] as const)(
+    'keeps the window’s shape when main answers %s, as main’s tree did not change',
     (outcome) => {
       const move = vi.fn()
       gestures().takePaneDrop?.({ sourcePaneId: 2, targetPaneId: 1, zone: 'left' }, move)
@@ -74,10 +84,10 @@ describe('layoutOwnerPaneGestures', () => {
       if (outcome === 'refused') {
         handlers?.refused?.('same_pane')
       } else {
-        handlers?.asToday()
+        handlers?.unapplied?.()
       }
 
-      expect(move).toHaveBeenCalledOnce()
+      expect(move).not.toHaveBeenCalled()
     }
   )
 
@@ -91,7 +101,7 @@ describe('layoutOwnerPaneGestures', () => {
     view.onDividerRatiosCommitted?.()
     const [first, second] = mocks.send.mock.calls.map(([, , on]) => on)
 
-    expect(() => first?.refused?.('pane_structure_changed')).toThrow('pane gone')
+    expect(() => first?.apply({})).toThrow('pane gone')
     expect(mocks.send).toHaveBeenCalledTimes(2)
 
     second?.apply({})
