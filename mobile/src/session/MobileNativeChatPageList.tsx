@@ -13,7 +13,11 @@ import {
   type ScrollView
 } from 'react-native'
 import type { NativeChatMessage } from '../../../src/shared/native-chat-types'
-import { MobileNativeChatKeptScope } from './mobile-native-chat-kept-disclosures'
+import {
+  MobileNativeChatDisclosureEpochContext,
+  MobileNativeChatKeptScope,
+  useMobileNativeChatDisclosureEpochs
+} from './mobile-native-chat-kept-disclosures'
 import type { MobileNativeChatRowKeys } from './mobile-native-chat-row-keys'
 import { styles } from './mobile-native-chat-view-styles'
 import { MobileNativeChatPageScroll, outOfAnchoring } from './MobileNativeChatPageScroll'
@@ -35,6 +39,7 @@ type Props = {
   /** What a row draws besides itself; a height measured for other state no longer holds. */
   rowState: (index: number, row: NativeChatMessage) => MobileNativeChatTurnRow
   layoutKey: string
+  toolsExpanded: boolean
   /** `measuring`: rows above are not measured yet, so the Load earlier slot shows loading. */
   header: (measuring: boolean) => ReactElement | null
   footer: ReactElement | null
@@ -54,11 +59,19 @@ export function MobileNativeChatPageList({
   renderItem,
   rowState,
   layoutKey,
+  toolsExpanded,
   header,
   footer,
   emptyStateView,
   onScroll
 }: Props): ReactElement {
+  const epochs = useMobileNativeChatDisclosureEpochs(
+    rows,
+    rowKeys.keyOf,
+    rowState,
+    toolsExpanded,
+    rowKeys.scope
+  )
   const scroll = useRef<ScrollView>(null)
   const scroller = useCallback(
     (): MobileNativeChatWindowScroller | null | undefined => scroll.current?.getScrollableNode(),
@@ -99,9 +112,9 @@ export function MobileNativeChatPageList({
   const drawRow = (item: NativeChatMessage, index: number) => {
     const key = rowKeys.keyOf(item)
     return (
-      <View key={key} ref={rowRef(key)}>
-        {renderItem({ item, index })}
-      </View>
+      <MobileNativeChatDisclosureEpochContext.Provider key={key} value={epochs.get(key)?.epoch}>
+        <View ref={rowRef(key)}>{renderItem({ item, index })}</View>
+      </MobileNativeChatDisclosureEpochContext.Provider>
     )
   }
   return (

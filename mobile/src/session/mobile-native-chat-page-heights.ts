@@ -28,6 +28,7 @@ function sameState(a: MobileNativeChatTurnRow, b: MobileNativeChatTurnRow): bool
 export class MobileNativeChatPageHeights {
   private entries = new Map<string, Entry>()
   private sum = 0
+  private samples = 0
 
   px(key: string | undefined): number | undefined {
     return key === undefined ? undefined : this.entries.get(key)?.px
@@ -35,7 +36,7 @@ export class MobileNativeChatPageHeights {
 
   /** For rows never drawn, which only ever sit below the reader. */
   estimate(): number {
-    return this.entries.size > 0 ? this.sum / this.entries.size : FIRST_ESTIMATE
+    return this.samples > 0 ? this.sum / this.samples : FIRST_ESTIMATE
   }
 
   valid(
@@ -60,8 +61,42 @@ export class MobileNativeChatPageHeights {
     state: MobileNativeChatTurnRow,
     layout: string
   ): void {
+    if (!this.entries.has(key)) {
+      this.samples += 1
+    }
     this.sum += px - (this.entries.get(key)?.px ?? 0)
     this.entries.set(key, { px, row, state, layout })
+  }
+
+  sourceKeys(
+    rows: readonly NativeChatMessage[],
+    keyOf: (row: NativeChatMessage) => string,
+    before: readonly string[] | undefined
+  ): {
+    keys: string[]
+    changed: boolean
+    indexOf: (key: string | undefined) => number | undefined
+  } {
+    let changed = before?.length !== rows.length
+    const keys = rows.map((row, index) => {
+      const key = keyOf(row)
+      changed ||= before?.[index] !== key
+      return key
+    })
+    let index: Map<string, number> | undefined
+    const indexOf = (key: string | undefined) =>
+      key === undefined ? undefined : (index ??= new Map(keys.map((k, at) => [k, at]))).get(key)
+    return { keys, changed, indexOf }
+  }
+
+  /** Retired payloads die after their heights supplied trim slack; estimation stays numeric. */
+  retain(keys: readonly string[]): void {
+    const current = new Set(keys)
+    for (const key of this.entries.keys()) {
+      if (!current.has(key)) {
+        this.entries.delete(key)
+      }
+    }
   }
 
   /** Spacer heights around the measuring rows `[m0, m1)` and the window `[start, end)`: above them
@@ -134,5 +169,6 @@ export class MobileNativeChatPageHeights {
   clear(): void {
     this.entries.clear()
     this.sum = 0
+    this.samples = 0
   }
 }

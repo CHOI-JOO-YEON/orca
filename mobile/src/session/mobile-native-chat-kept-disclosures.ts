@@ -3,10 +3,13 @@ import {
   createElement,
   useCallback,
   useContext,
+  useLayoutEffect,
+  useRef,
   useState,
   type ReactElement,
   type ReactNode
 } from 'react'
+import type { NativeChatMessage } from '../../../src/shared/native-chat-types'
 
 /** Show more on a tool run: what the reader asked for, and the lines older calls added above. */
 export type MobileNativeChatReveal = { requested: number; before: number; first?: string }
@@ -21,6 +24,43 @@ export type MobileNativeChatKept = {
 /** Provided where rows unmount once scrolled past (the phone page's window); elsewhere rows keep
  *  their own state as before. */
 export const MobileNativeChatKeptContext = createContext<MobileNativeChatKept | null>(null)
+
+export const MobileNativeChatDisclosureEpochContext = createContext<number | undefined>(undefined)
+
+type Reset = { tools: boolean; turn: boolean; epoch: number }
+
+/** Reset ownership includes evicted rows; returning to a prior toggle must never revive its keys. */
+export function useMobileNativeChatDisclosureEpochs(
+  rows: readonly NativeChatMessage[],
+  keyOf: (row: NativeChatMessage) => string,
+  rowState: (index: number, row: NativeChatMessage) => { turnExpanded: boolean },
+  tools: boolean,
+  scope: string
+): ReadonlyMap<string, Reset> {
+  const committed = useRef<{
+    scope: string
+    next: number
+    rows: ReadonlyMap<string, Reset>
+  } | null>(null)
+  const before = committed.current?.scope === scope ? committed.current : null
+  let next = before?.next ?? 0
+  const resets = new Map<string, Reset>()
+  rows.forEach((row, index) => {
+    const key = keyOf(row)
+    const turn = rowState(index, row).turnExpanded
+    const previous = before?.rows.get(key)
+    resets.set(
+      key,
+      previous?.tools === tools && previous.turn === turn
+        ? previous
+        : { tools, turn, epoch: next++ }
+    )
+  })
+  useLayoutEffect(() => {
+    committed.current = { scope, next, rows: resets }
+  })
+  return resets
+}
 
 /** One chat's kept disclosures; keyed by the chat so another chat starts with none. */
 export function MobileNativeChatKeptScope({ children }: { children: ReactNode }): ReactElement {

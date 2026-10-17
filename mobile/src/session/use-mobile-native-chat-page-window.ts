@@ -59,12 +59,10 @@ export function useMobileNativeChatPageWindow(args: {
   const onSettled = useRef(() => {})
   const [motion] = useState(() => new MobileNativeChatPageMotion(() => onSettled.current()))
   const [anchoring] = useState(() => new MobileNativeChatPageAnchoring(scroller, isFollowing))
-  const keys = useMemo(() => rows.map(rowKeys.keyOf), [rows, rowKeys.keyOf])
-  const indexOf = useMemo(() => {
-    let map: Map<string, number> | undefined
-    return (key: string | undefined) =>
-      key === undefined ? undefined : (map ??= new Map(keys.map((k, at) => [k, at]))).get(key)
-  }, [keys])
+  const { keys, changed, indexOf } = useMemo(
+    () => heights.sourceKeys(rows, rowKeys.keyOf, drawn.current?.keys),
+    [rows, rowKeys.keyOf, heights]
+  )
   const n = keys.length
   const at = (key: string, fallback: number): number =>
     keys[fallback] === key
@@ -220,6 +218,9 @@ export function useMobileNativeChatPageWindow(args: {
       motion.release()
       drawnRows.forgetAnchor()
     }
+    if (changed && drawn.current?.keys !== keys) {
+      heights.retain(keys)
+    }
     const last = end >= n ? null : keys[end - 1]!
     const m = m0 < m1 ? { from: keys[m0]!, fromAt: m0, to: keys[m1 - 1]!, toAt: m1 - 1 } : null
     const seat = { first: keys[start] ?? '', firstAt: start, last, lastAt: end - 1 }
@@ -331,8 +332,8 @@ export function useMobileNativeChatPageWindow(args: {
       settled: () => motion.whenSettled(),
       syncAnchoring: () => anchoring.sync(),
       holdPlace: (on: boolean) => anchoring.hold(on),
-      watchReader: (fn: ((moved: number, fromEnd: number) => void) | null) => {
-        motion.onReader = fn
+      watchMotion: (fn: typeof motion.onMotion) => {
+        motion.onMotion = fn
       },
       wrote: (target: number) => motion.wrote(target)
     }),

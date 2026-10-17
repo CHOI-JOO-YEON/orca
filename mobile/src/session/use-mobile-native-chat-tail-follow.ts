@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react'
 import { Platform, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native'
 import type { MobileNativeChatScrollNode } from './MobileNativeChatScrollHold'
+import type { MobileNativeChatPageObservation } from './mobile-native-chat-page-motion'
 
 /** Distance from the bottom, in points, still treated as "at the tail". */
 const AT_TAIL_SLOP = 80
@@ -63,8 +64,8 @@ export type MobileNativeChatListHandle = {
   keepInPlace?: (drift: number) => void
   /** Page only: resolves once the reader stops moving the list, or the list goes away. */
   settled?: () => Promise<void>
-  /** Page only: called with each scroll the reader made (not the page's writes or layout). */
-  watchReader?: (fn: ((moved: number, fromEnd: number) => void) | null) => void
+  /** Page only: each classified move, before any resize correction or end pin. */
+  watchMotion?: (fn: ((observation: MobileNativeChatPageObservation) => void) | null) => void
   /** Page only: following changed, which decides whether the browser's anchoring may move it. */
   syncAnchoring?: () => void
   /** Page only: the place-hold takes the scroll from the browser's anchoring for its correction. */
@@ -115,12 +116,13 @@ export type MobileNativeChatTailFollow = {
  *  Intent (`following`) is kept separate from geometry (at-tail): a programmatic
  *  scroll reports metrics like any other, so letting metrics decide intent let
  *  the view argue with itself. Only the user's own gestures and explicit jumps
- *  move intent; metrics only decide where a *released* gesture leaves us.
+ *  move native intent; metrics decide where a *released* gesture leaves us. On
+ *  the page, position resumes following; only reader input detaches it.
  */
 export function useMobileNativeChatTailFollow(args: {
   /** Guards `scrollToEnd` against an empty list. */
   hasItems: boolean
-  /** The chat shown; on the page another one opens following, whatever the reader did here. */
+  /** The chat shown; another one opens following, whatever the reader did here. */
   scopeKey: string
 }): MobileNativeChatTailFollow {
   const { hasItems, scopeKey } = args
@@ -172,24 +174,36 @@ export function useMobileNativeChatTailFollow(args: {
     (list: MobileNativeChatListHandle | null) => {
       listRef.current = list
       const page = !listReportsGestures()
+      // Resize geometry is authoritative only after the list restores a parked place.
+      const afterCorrection = () => {
+        const scroller = list?.getScrollableNode()
+        if (
+          scroller &&
+          scroller.scrollHeight - scroller.clientHeight - scroller.scrollTop <= PAGE_MOVE_SLOP
+        ) {
+          setFollowing(true)
+        }
+        pinPageToEnd()
+      }
       const observer = page
         ? observePageResize(list?.getScrollableNode(), (entries) =>
-            list?.afterResize ? list.afterResize(entries, pinPageToEnd) : pinPageToEnd()
+            list?.afterResize ? list.afterResize(entries, afterCorrection) : afterCorrection()
           )
         : null
       list?.observeWith?.(observer)
-      // The page reports no drag: the list says which scrolls were the reader's, and how far.
-      list?.watchReader?.((moved, fromEnd) => {
-        if (followingRef.current) {
-          if (moved < -PAGE_MOVE_SLOP && fromEnd > PAGE_MOVE_SLOP) {
+      list?.watchMotion?.(({ by, moved, fromEnd }) => {
+        if (by === 'reader' && fromEnd <= PAGE_MOVE_SLOP) {
+          setFollowing(true)
+        } else if (followingRef.current) {
+          if (by === 'reader' && moved < -PAGE_MOVE_SLOP && fromEnd > PAGE_MOVE_SLOP) {
             setFollowing(false)
           }
-        } else if (moved > PAGE_MOVE_SLOP && fromEnd <= AT_TAIL_SLOP) {
+        } else if (by !== 'own' && moved > PAGE_MOVE_SLOP && fromEnd <= AT_TAIL_SLOP) {
           setFollowing(true)
         }
       })
       return () => {
-        list?.watchReader?.(null)
+        list?.watchMotion?.(null)
         list?.observeWith?.(null)
         observer?.disconnect()
         listRef.current = null
@@ -297,15 +311,12 @@ export function useMobileNativeChatTailFollow(args: {
   const pageSettled = useCallback(() => listRef.current?.settled?.() ?? Promise.resolve(), [])
 
   // The view stays mounted across chats: before paint, so the next one never shows where the reader
-  // left the last. Page only until the native list takes the same reset.
+  // left the last.
   useLayoutEffect(() => {
     if (scopeKeyRef.current === scopeKey) {
       return
     }
     scopeKeyRef.current = scopeKey
-    if (listReportsGestures()) {
-      return
-    }
     jumpToTail()
   }, [scopeKey, jumpToTail])
 

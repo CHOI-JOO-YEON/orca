@@ -4,6 +4,7 @@ const REST_MS = 150
 const INTENT_MS = 1_000
 const SCROLL_KEYS = new Set(['ArrowDown', 'ArrowUp', 'End', 'Home', 'PageDown', 'PageUp', ' '])
 type Moved = { by: 'own' | 'layout' | 'reader' | 'none'; moved: number }
+export type MobileNativeChatPageObservation = Moved & { fromEnd: number }
 
 /** WebKit (every iOS browser, and Safari) stops a fling on any scroll write and has no scroll
  *  anchoring; other engines keep momentum, and their anchoring keeps a parked reader's place. */
@@ -78,8 +79,8 @@ export class MobileNativeChatPageMotion {
   private later: ReturnType<typeof setTimeout> | undefined
   /** Owed work doesn't run again before this, so other work gets frames between its rounds. */
   private quietUntil = 0
-  /** Told each move that was the reader's, with how far it is from the end. */
-  onReader: ((moved: number, fromEnd: number) => void) | null = null
+  /** Classified before the follower sees geometry, including layout and the page's writes. */
+  onMotion: ((observation: MobileNativeChatPageObservation) => void) | null = null
   private waiters: (() => void)[] = []
 
   constructor(private readonly onSettled: () => void) {}
@@ -186,10 +187,10 @@ export class MobileNativeChatPageMotion {
     if (at !== -1) {
       this.own.splice(0, at + 1)
       ;[this.seen, this.seenMax] = [scrollTop, max]
-      return { by: 'own', moved }
+      return this.observed('own', moved, max - scrollTop)
     }
     if (Math.abs(moved) >= 0.5 && !this.touching && (this.unreconciled || placeMoved())) {
-      return { by: 'layout', moved }
+      return this.observed('layout', moved, max - scrollTop)
     }
     return this.account(scrollTop, max)
   }
@@ -200,21 +201,25 @@ export class MobileNativeChatPageMotion {
     const [from, fromMax, moved] = [this.seen, this.seenMax, scrollTop - this.seen]
     ;[this.seen, this.seenMax] = [scrollTop, max]
     if (Math.abs(moved) < 0.5) {
-      return { by: 'none', moved }
+      return this.observed('none', moved, max - scrollTop)
     }
     // Pulled back onto a shorter end from where the old one allowed; iOS bouncing past an end is not.
     const clamped = Math.abs(scrollTop - max) < 0.5 && from > max + 0.5 && from <= fromMax + 0.5
     if ((clamped && !this.touching) || (this.browserMoves && !this.intended(moved))) {
-      return { by: 'layout', moved }
+      return this.observed('layout', moved, max - scrollTop)
     }
     this.lastReaderScroll = Date.now()
     this.poke()
-    this.onReader?.(moved, max - scrollTop)
-    return { by: 'reader', moved }
+    return this.observed('reader', moved, max - scrollTop)
+  }
+
+  private observed(by: Moved['by'], moved: number, fromEnd: number): Moved {
+    this.onMotion?.({ by, moved, fromEnd })
+    return { by, moved }
   }
 
   /** Input is recent (a fling counts from the finger's release) and the move goes its way: the
-   *  browser's anchoring moving against it is the browser's, so it can't make the page follow. */
+   *  browser's anchoring moving against it is the browser's, so it can't detach the reader. */
   private intended(moved: number): boolean {
     const recent = this.touching || this.pointing || Date.now() - this.lastInput <= INTENT_MS
     return recent && (this.way === 0 || Math.sign(moved) === this.way)

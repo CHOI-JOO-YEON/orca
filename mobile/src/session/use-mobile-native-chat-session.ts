@@ -3,7 +3,11 @@ import {
   createNativeChatTranscriptRetention,
   encodeNativeChatTranscriptIdentity
 } from '../../../src/shared/native-chat-transcript-retention'
-import { createNativeChatMerger, replaceList } from '../../../src/shared/native-chat-merge'
+import {
+  createNativeChatMerger,
+  mergeNativeChatMessages,
+  replaceList
+} from '../../../src/shared/native-chat-merge'
 import type { NativeChatMessage } from '../../../src/shared/native-chat-types'
 import { buildNativeChatSubscriptionId } from '../../../src/shared/native-chat-stream-unsubscribe'
 import type { RpcClient } from '../transport/rpc-client'
@@ -285,6 +289,7 @@ export function useMobileNativeChatSession(args: {
         if ('error' in result) {
           return 'failed'
         }
+        const receivedLive = new Map(mergerRef.current.list.map((message) => [message.id, message]))
         // The page lands once the reader stops scrolling: rows growing above them mid-fling would move
         // what they read, and iOS stops the fling on the write that would hold it.
         if (settled) {
@@ -310,7 +315,11 @@ export function useMobileNativeChatSession(args: {
           // it waited stay.
           const live = mergerRef.current.list
           const after = live.findIndex((message) => message.id === result.messages.at(-1)?.id)
-          setList(after === -1 ? result.messages : [...result.messages, ...live.slice(after + 1)])
+          const landed =
+            after === -1 ? result.messages : [...result.messages, ...live.slice(after + 1)]
+          // Only updates accepted after receipt outrank history; unchanged cached rows may be stale.
+          const changed = live.filter((message) => receivedLive.get(message.id) !== message)
+          setList(mergeNativeChatMessages(landed, changed))
           more = result.messages.length >= nextLimit
         }
         setHasMore(more)

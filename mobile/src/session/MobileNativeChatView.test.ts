@@ -722,31 +722,32 @@ describe('MobileNativeChatView', () => {
       expect(scrollToEnd).not.toHaveBeenCalled()
     })
 
-    it('lets the browser hold a parked place, and never takes its moves for the reader', async () => {
+    it('resumes an expired downward fling near the end, preserving small upward detachment', async () => {
       const now = vi.spyOn(Date, 'now').mockReturnValue(10_000)
-      // Who holds the place: the browser's anchoring while parked, the end pin while following.
+      vi.stubGlobal('navigator', { userAgent: 'Chrome' })
       const browserHolds = () => pageScroller.style.overflowAnchor === 'auto'
       await render({ folded: ['a1', 'a2', 'a3'].map((id) => assistantTurn(id, id)) })
       scrollTo(500, 1_000)
       resized()
-      expect(browserHolds()).toBe(false)
-
-      // The reader wheels up to just short of the end: parked.
       pageScroller.input('wheel')
-      scrollTo(450, 1_000)
-      expect(browserHolds()).toBe(true)
-
-      // Later a row above grows and the browser keeps the place: that move down near the end is
-      // not the reader's, so it doesn't follow again, and the page writes nothing.
-      now.mockReturnValue(20_000)
-      scrollTo(690, 1_240)
+      scrollTo(497, 1_000)
+      // Expired input and geometry away from the end cannot detach or attach by themselves.
+      now.mockReturnValue(11_100)
+      pageScroller.scrollHeight = 1_200
       resized()
       expect(browserHolds()).toBe(true)
-      expect(scrollToOffset).not.toHaveBeenCalled()
-
-      // The reader's own wheel back to the end follows again.
+      scrollTo(632, 1_200)
+      expect(browserHolds()).toBe(false)
+      pageScroller.scrollHeight = 1_300
+      resized()
+      expect(scrollToOffset).toHaveBeenLastCalledWith({ animated: false, offset: 800 })
+      scrollTo(800, 1_300) // Deliver the pin's own scroll before the next reader movement.
+      // The first upward movement can arrive in resize before its scroll event.
       pageScroller.input('wheel')
-      scrollTo(740, 1_240)
+      pageScroller.scrollTop = 780
+      resized()
+      expect(browserHolds()).toBe(true)
+      scrollTo(799, 1_300)
       expect(browserHolds()).toBe(false)
       now.mockRestore()
     })
@@ -765,6 +766,17 @@ describe('MobileNativeChatView', () => {
       act(() => loadEarlier().props.onPress())
       expect(onLoadEarlier).toHaveBeenCalledOnce()
     })
+  })
+
+  it('starts an initially empty switched-to native chat following, preserving Tools', async () => {
+    await render({ folded: [assistantTurn('a', 'A')] })
+    act(() => renderer!.root.findByType('ChevronsUpDown').parent!.props.onPress())
+    await scrollAwayFromTail()
+    await update({ sendSurfaceId: 'tab-b', folded: [] })
+    await update({ sendSurfaceId: 'tab-b', folded: [assistantTurn('b', 'B')] })
+    act(() => list().props.onContentSizeChange(320, 1300))
+    expect(scrollToOffset).toHaveBeenLastCalledWith({ animated: false, offset: 1300 })
+    expect(renderedRow('b').props.toolsExpanded).toBe(true)
   })
 
   it('routes an accepted send through the immediate nonanimated tail owner', async () => {

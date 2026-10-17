@@ -368,6 +368,7 @@ export function MobileNativeChatView({
                 rowKeys={rowKeys}
                 renderItem={renderItem}
                 rowState={turns.resolveRow}
+                toolsExpanded={toolsExpanded}
                 {...{ footer, emptyStateView, onScroll, header: pageHeader, layoutKey }}
               />
             ) : (
