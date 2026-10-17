@@ -43,7 +43,7 @@ function runningCard(
   cancelling: boolean
 ): ManagedRuntimeInstallCard | null {
   const current = STEP_PHASES.indexOf(operation.phase)
-  if (current < 0) {
+  if (current === -1) {
     return null
   }
   const { downloadedBytes: done, totalBytes: total } = operation
