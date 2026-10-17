@@ -38,5 +38,7 @@ describe('responsive layout metrics', () => {
       horizontalPadding: spacing.lg
     })
     expect(getResponsiveLayoutMetrics(430, 932)).toMatchObject({ isLandscapePhone: false })
+    // A short, narrow web window is wider than tall but has no room for tabs in the top bar.
+    expect(getResponsiveLayoutMetrics(390, 350)).toMatchObject({ isLandscapePhone: false })
   })
 })
