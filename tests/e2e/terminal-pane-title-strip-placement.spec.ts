@@ -11,8 +11,7 @@ import {
   readTerminalPaneDomLeafOrder,
   splitActiveTerminalPane,
   waitForPaneIdentitySnapshot,
-  waitForPaneCount,
-  getTerminalContent
+  waitForPaneCount
 } from './helpers/terminal'
 import { setPaneTitleFromTerminalMenu } from './helpers/terminal-pane-title-actions'
 import { registerTerminalPaneMountReadiness } from './helpers/terminal-pane-mount-readiness'
@@ -58,7 +57,9 @@ test.describe.configure({ mode: 'serial' })
 test.describe('Terminal Panes', () => {
   registerTerminalPaneMountReadiness()
 
-  test('Set Title strip activates its pane and accepts file-path drops', async ({ orcaPage }) => {
+  test('Set Title strip accepts file-path drops without changing the active pane', async ({
+    orcaPage
+  }) => {
     const title = `Drop target title ${Date.now()}`
     const droppedPath = `/tmp/title-drop-${Date.now()}.txt`
 
@@ -112,17 +113,30 @@ test.describe('Terminal Panes', () => {
     }, droppedPath)
 
     await expect
-      .poll(async () => (await readPaneIdentitySnapshot(orcaPage))?.activeLeafId ?? null, {
-        timeout: 5_000,
-        message: 'Title-strip drop did not activate the titled pane'
-      })
-      .toBe(titledLeafId)
-    await expect
-      .poll(async () => (await getTerminalContent(orcaPage)).includes(droppedPath), {
-        timeout: 5_000,
-        message: 'Title-strip drop did not paste into the titled pane terminal'
-      })
-      .toBe(true)
+      .poll(
+        () =>
+          orcaPage.evaluate(
+            ({ tabId, targetLeafId, otherLeafId, droppedPath }) => {
+              const manager = window.__paneManagers?.get(tabId)
+              const panes = manager?.getPanes() ?? []
+              const content = (leafId: string) =>
+                panes.find((pane) => pane.leafId === leafId)?.serializeAddon?.serialize() ?? ''
+              return {
+                activeLeafId: manager?.getActivePane()?.leafId ?? null,
+                targetHasPath: content(targetLeafId).includes(droppedPath),
+                otherHasPath: content(otherLeafId).includes(droppedPath)
+              }
+            },
+            {
+              tabId: splitSnapshot.tabId,
+              targetLeafId: titledLeafId,
+              otherLeafId: otherPane.leafId,
+              droppedPath
+            }
+          ),
+        { timeout: 5_000, message: 'Title-strip drop changed selection or missed its target' }
+      )
+      .toEqual({ activeLeafId: otherPane.leafId, targetHasPath: true, otherHasPath: false })
   })
 
   test('Set Title overlay follows its pane after same-count pane move', async ({ orcaPage }) => {

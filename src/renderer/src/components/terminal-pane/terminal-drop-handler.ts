@@ -131,8 +131,7 @@ export async function handleInternalTerminalFileDrop({
     recordTerminalUserInputForLeaf(tabId, pane.leafId)
   }
   if (writeResult.targetCurrent) {
-    // Terminal focus alone leaves the previously active pane selected; a drop must make its pane active.
-    manager.setActivePane(pane.id)
+    pane.terminal.focus()
   }
   if (writeResult.failureReason) {
     return {
