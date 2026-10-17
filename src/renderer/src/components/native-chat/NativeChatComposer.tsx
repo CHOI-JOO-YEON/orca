@@ -53,6 +53,7 @@ const NativeChatComposerPane = forwardRef<NativeChatComposerHandle, NativeChatCo
       targetPtyId,
       agent,
       canSend = true,
+      unavailableHint,
       isWorking = false,
       isStopping = false,
       afterStop,
@@ -152,7 +153,7 @@ const NativeChatComposerPane = forwardRef<NativeChatComposerHandle, NativeChatCo
 
     // Why inputOwnedByCard: the hidden field can still hold keyboard focus for a frame.
     const [hasPty, disabled] = structuredTransport
-      ? [true, !canSend]
+      ? [true, !canSend || unavailableHint !== undefined]
       : [targetPtyId !== null, targetPtyId === null || !canSend || inputOwnedByCard]
 
     const attachments = useNativeChatComposerAttachments({
@@ -361,6 +362,7 @@ const NativeChatComposerPane = forwardRef<NativeChatComposerHandle, NativeChatCo
         disabled={disabled}
         hasPty={hasPty}
         canSend={canSend}
+        unavailableHint={unavailableHint}
         autocomplete={autocomplete}
         mentionFiles={mentionFiles}
         activeSuggestion={activeSuggestion}

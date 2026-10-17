@@ -17,7 +17,7 @@ export type ManagedRuntimeInstallView = {
   action: ManagedRuntimeInstallAction | null
 }
 
-const megabytes = (bytes: number): string => (bytes / 1_000_000).toFixed(1)
+export const megabytes = (bytes: number): string => (bytes / 1_000_000).toFixed(1)
 
 function runningView(
   operation: NonNullable<ManagedRuntimeInstallState['operation']>,
