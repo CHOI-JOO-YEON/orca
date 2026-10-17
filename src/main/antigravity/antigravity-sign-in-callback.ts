@@ -14,10 +14,10 @@ export function antigravitySignInCallback(
   pending: AntigravitySignInPending,
   callbackUrl: string
 ): URL {
-  const text = callbackUrl.trim()
-  if (text.length > 16_384) {
+  if (callbackUrl.length > 16_384) {
     throw new Error('The sign-in response URL is too long.')
   }
+  const text = callbackUrl.trim()
   if (!URL.canParse(text)) {
     throw new Error('Paste the complete redirect URL from the Google sign-in page.')
   }
@@ -50,8 +50,14 @@ export function antigravitySignInCallback(
   return callback
 }
 
-/** One GET to the server's listener; `agent: false` so no proxy setting can route it elsewhere. */
-export function sendAntigravitySignInCallback(callback: URL, timeoutMs = 10_000): Promise<void> {
+/** One GET to the server's listener; `agent: false` so no proxy setting can route it elsewhere.
+ *  The flow's end aborts it, request and answer both. */
+export function sendAntigravitySignInCallback(
+  callback: URL,
+  flow: AbortSignal,
+  timeoutMs = 10_000
+): Promise<void> {
+  const signal = AbortSignal.any([flow, AbortSignal.timeout(timeoutMs)])
   return new Promise((resolve, reject) => {
     const sent = request(
       {
@@ -59,8 +65,7 @@ export function sendAntigravitySignInCallback(callback: URL, timeoutMs = 10_000)
         port: callback.port,
         path: `${callback.pathname}${callback.search}`,
         method: 'GET',
-        agent: false,
-        signal: AbortSignal.timeout(timeoutMs)
+        agent: false
       },
       (response) => {
         response.once('error', reject)
@@ -75,6 +80,12 @@ export function sendAntigravitySignInCallback(callback: URL, timeoutMs = 10_000)
         response.resume()
       }
     )
+    const stop = (): void => {
+      reject(new Error('Sending the sign-in address was stopped.'))
+      sent.destroy()
+    }
+    signal.addEventListener('abort', stop, { once: true })
+    sent.once('close', () => signal.removeEventListener('abort', stop))
     sent.once('error', reject)
     sent.end()
   })

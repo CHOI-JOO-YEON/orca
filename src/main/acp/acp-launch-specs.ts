@@ -52,7 +52,7 @@ import {
   answerAntigravityChatAuth,
   antigravityChatAccount
 } from '../antigravity/antigravity-chat-account'
-import { antigravitySignInLinkText } from '../antigravity/antigravity-browser-helper'
+import { readAntigravitySignInLine } from '../antigravity/antigravity-sign-in-url'
 import type { AcpSignInWatch } from './acp-agent-connection'
 import { AcpLaunchGate } from './acp-launch-gate'
 
@@ -101,7 +101,7 @@ export type AcpLaunchSpec = {
     advertised: readonly string[]
     env: Readonly<Record<string, string>>
   }): string | undefined
-  /** The agent's browser sign-in on its output: a prompt line ends the chat signed out. */
+  /** The agent's browser sign-in on its output: a valid sign-in line ends the chat signed out. */
   signIn?: Omit<AcpSignInWatch, 'link'>
   /** The account each chat pins, and how a launch points the agent at it. */
   account: AcpAccountBinding
@@ -267,7 +267,7 @@ export const ANTIGRAVITY_LAUNCH_SPEC = {
   authMethod: ({ advertised }) =>
     advertised.includes('oauth-personal') ? 'oauth-personal' : undefined,
   signIn: {
-    prompt: (line) => antigravitySignInLinkText(line) !== null,
+    read: readAntigravitySignInLine,
     // The host's sign-in status is the server's latest answer, as chats meet it.
     answered: answerAntigravityChatAuth
   },
