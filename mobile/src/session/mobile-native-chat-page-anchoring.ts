@@ -16,9 +16,7 @@ export class MobileNativeChatPageAnchoring {
 
   constructor(
     private readonly scroller: () => Styled | null | undefined,
-    private readonly following: () => boolean,
-    /** Told of the page's own scroll writes, so their events are never the reader's. */
-    private readonly motion: { wrote: (target: number) => void }
+    private readonly following: () => boolean
   ) {}
 
   /** The page takes the scroll for one correction, or gives it back. */
@@ -56,15 +54,14 @@ export class MobileNativeChatPageAnchoring {
     this.rechoose(s)
   }
 
-  /** A scroll makes the browser choose its anchor afresh; at the very top it keeps none anyway. */
+  /** A scroll makes the browser choose its anchor afresh; at the very top it keeps none anyway. It
+   *  ends where it started, so the scroll event after it reports only what else moved the scroll;
+   *  taken as the page's own writes, a reader's scroll landing there would be too. */
   private rechoose(s: Styled): void {
     const top = s.scrollTop
-    if (top < 0.5) {
-      return
-    }
-    for (const target of [top - 1, top]) {
-      this.motion.wrote(target)
-      s.scrollTop = target
+    if (top >= 0.5) {
+      s.scrollTop = top - 1
+      s.scrollTop = top
     }
   }
 }

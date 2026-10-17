@@ -58,9 +58,7 @@ export function useMobileNativeChatPageWindow(args: {
   const streamedAt = useRef(0)
   const onSettled = useRef(() => {})
   const [motion] = useState(() => new MobileNativeChatPageMotion(() => onSettled.current()))
-  const [anchoring] = useState(
-    () => new MobileNativeChatPageAnchoring(scroller, isFollowing, motion)
-  )
+  const [anchoring] = useState(() => new MobileNativeChatPageAnchoring(scroller, isFollowing))
   const keys = useMemo(() => rows.map(rowKeys.keyOf), [rows, rowKeys.keyOf])
   const indexOf = useMemo(() => {
     let map: Map<string, number> | undefined
