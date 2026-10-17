@@ -12,6 +12,8 @@ type Styled = {
  *  same move back. */
 export class MobileNativeChatPageAnchoring {
   private holds = 0
+  /** The scroll moved since the browser last chose its anchor from the rows drawn now. */
+  private moved = false
   private readonly none = scrollWritesStopMomentum()
 
   constructor(
@@ -36,11 +38,29 @@ export class MobileNativeChatPageAnchoring {
     s.style.overflowAnchor = next
     s.getBoundingClientRect()
     if (next === 'auto') {
-      // A scroll makes the browser choose its anchor afresh, not keep one from before the page's
-      // turn, whose move it would then put back too.
-      const top = s.scrollTop
-      s.scrollTop = top > 0 ? top - 1 : top + 1
-      s.scrollTop = top
+      // Not one kept from before the page's turn, whose move the browser would then put back too.
+      this.rechoose(s)
     }
+  }
+
+  scrolled(): void {
+    this.moved = true
+  }
+
+  /** At rest after a scroll: the browser chooses its anchor only when the scroll moves, and a scroll
+   *  that landed on a spacer (never an anchor) left it none, though rows are drawn there now. */
+  rested(): void {
+    const s = this.scroller()
+    if (this.moved && !this.none && s?.style?.overflowAnchor === 'auto') {
+      this.moved = false
+      this.rechoose(s)
+    }
+  }
+
+  /** A scroll makes the browser choose its anchor afresh. */
+  private rechoose(s: Styled): void {
+    const top = s.scrollTop
+    s.scrollTop = top > 0 ? top - 1 : top + 1
+    s.scrollTop = top
   }
 }
