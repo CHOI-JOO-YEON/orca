@@ -5,6 +5,7 @@ import { MobileNativeChatPageHeights } from './mobile-native-chat-page-heights'
 import { MobileNativeChatPageAnchoring } from './mobile-native-chat-page-anchoring'
 import {
   MobileNativeChatPageMotion,
+  pageKeepsPlace,
   scrollWritesStopMomentum
 } from './mobile-native-chat-page-motion'
 import { MobileNativeChatPageRows } from './mobile-native-chat-page-rows'
@@ -126,7 +127,8 @@ export function useMobileNativeChatPageWindow(args: {
   const takeAnchor = useCallback(
     (s: MobileNativeChatWindowScroller) => {
       // Elsewhere the browser's anchoring keeps a parked place and the end pin a following one.
-      if (!scrollWritesStopMomentum()) {
+      if (!pageKeepsPlace(s.scrollTop)) {
+        drawnRows.forgetAnchor()
         return
       }
       const at = drawn.current
@@ -290,7 +292,8 @@ export function useMobileNativeChatPageWindow(args: {
         }
       }
       // As of the layout, before a move no scroll event has reported yet is counted.
-      const shift = !at.following && motion.mayCorrect() ? drawnRows.placeShift(s) : null
+      const own = !at.following && motion.mayCorrect() && pageKeepsPlace(s.scrollTop)
+      const shift = own ? drawnRows.placeShift(s) : null
       const max = s.scrollHeight - s.clientHeight
       const { by, moved } = motion.reconciled(s.scrollTop, max)
       if (shift !== null) {

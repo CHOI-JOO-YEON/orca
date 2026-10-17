@@ -12,6 +12,12 @@ export function scrollWritesStopMomentum(): boolean {
   return /AppleWebKit/.test(agent) && !/Chrome|Chromium|Android/.test(agent)
 }
 
+/** Whether the page keeps a parked place itself: on WebKit, which has no scroll anchoring, and at the
+ *  very top, where Chromium's anchoring never adjusts (rows measured above would push the reader). */
+export function pageKeepsPlace(scrollTop: number): boolean {
+  return scrollWritesStopMomentum() || scrollTop < 0.5
+}
+
 type Listener = (event: unknown) => void
 type Listened = {
   addEventListener: (type: string, listener: Listener, options: { passive: true }) => void
