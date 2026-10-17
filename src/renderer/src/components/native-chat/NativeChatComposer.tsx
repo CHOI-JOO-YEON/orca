@@ -26,7 +26,7 @@ import type {
   NativeChatComposerProps
 } from './native-chat-composer-types'
 import { useNativeChatPtyComposerSend } from './use-native-chat-pty-composer-send'
-import { useNativeChatHeldQueueComposerSend } from './use-native-chat-held-queue-composer-send'
+import { useNativeChatStructuredComposerSend } from './use-native-chat-structured-composer-send'
 import { useImeEnterGestureOwnership } from '@/lib/ime-composition-keyboard-event'
 import { useNativeChatComposerAppMenuSelection } from './use-native-chat-composer-app-menu-selection'
 import { useNativeChatComposerSubmit } from './use-native-chat-composer-submit'
@@ -137,12 +137,11 @@ const NativeChatComposerPane = forwardRef<NativeChatComposerHandle, NativeChatCo
       dismiss,
       handleDraftOrCaretChange
     } = picker
-    const resumeCommand = useNativeChatResumeCommand({
+    const resume = useNativeChatResumeCommand({
       structuredTransport,
       agent,
       terminalTabId,
-      isPickedSkill: picker.isPickedSkill,
-      clearSkillOrigin,
+      picker,
       textareaRef,
       setDraft,
       setCaret,
@@ -184,7 +183,12 @@ const NativeChatComposerPane = forwardRef<NativeChatComposerHandle, NativeChatCo
     const { imageAttachments, attachResolvedPaths, clearImageAttachments, removeImageAttachment } =
       attachments
     const imageBlock = nativeChatImageSendBlock(imageAttachments)
-    const sendHeld = disabled || structuredTransport?.sendOut === true || imageBlock.holdsSend
+    const sendBlockedReason = imageBlock.reason ?? structuredTransport?.sendBlockedReason ?? null
+    const sendHeld =
+      disabled ||
+      structuredTransport?.sendOut === true ||
+      imageBlock.holdsSend ||
+      structuredTransport?.sendBlockedReason !== undefined
     const sendButtonDisabled = isWorking
       ? !hasPty || !onStop
       : sendHeld || (draft.trim() === '' && imageAttachments.length === 0)
@@ -254,7 +258,7 @@ const NativeChatComposerPane = forwardRef<NativeChatComposerHandle, NativeChatCo
     const contextUsageSummary = useNativeChatContextUsageSummary(structuredTransport)
     const sessionOptionsSnapshot = structuredTransport?.optionSnapshot ?? ptySessionOptionsSnapshot
 
-    const { send: sendStructured, fieldProps: queue } = useNativeChatHeldQueueComposerSend({
+    const sendStructured = useNativeChatStructuredComposerSend({
       agent,
       draftScopeKey,
       imageAttachments,
@@ -303,7 +307,7 @@ const NativeChatComposerPane = forwardRef<NativeChatComposerHandle, NativeChatCo
       disabled,
       sendPty,
       sendStructured,
-      consumeOrcaCommand: resumeCommand.consume,
+      consumeOrcaCommand: resume.consume,
       setDraft,
       setCaret
     })
@@ -337,9 +341,7 @@ const NativeChatComposerPane = forwardRef<NativeChatComposerHandle, NativeChatCo
       recall: recall.recall,
       isComposing: imeEnterGesture.isComposing,
       completePickerItem: goalMode.interceptPick(completeItem),
-      dispatchPickerCommand: goalMode.interceptPick(
-        resumeCommand.interceptPick(dispatchPickerCommand, autocomplete)
-      ),
+      dispatchPickerCommand: goalMode.interceptPick(resume.interceptPick(dispatchPickerCommand)),
       dismissPicker: dismiss,
       interrupt,
       send,
@@ -376,7 +378,7 @@ const NativeChatComposerPane = forwardRef<NativeChatComposerHandle, NativeChatCo
         imageAttachments={imageAttachments}
         attachmentEnvironmentId={structuredTransport?.runtimeEnvironmentId ?? undefined}
         sendButtonDisabled={sendButtonDisabled}
-        sendBlockedReason={imageBlock.reason}
+        sendBlockedReason={sendBlockedReason}
         isWorking={isWorking}
         isStopping={isStopping}
         afterStop={afterStop}
@@ -403,9 +405,7 @@ const NativeChatComposerPane = forwardRef<NativeChatComposerHandle, NativeChatCo
         }}
         onPaste={handlePasteEvent}
         pickerListboxId={picker.listboxId}
-        onChoosePickerItem={goalMode.interceptPick(
-          resumeCommand.interceptPick(completeItem, autocomplete)
-        )}
+        onChoosePickerItem={goalMode.interceptPick(resume.interceptPick(completeItem))}
         goalMode={goalMode}
         onRetrySkills={picker.retrySkills}
         onChooseMentionFile={completeMention}
@@ -416,7 +416,6 @@ const NativeChatComposerPane = forwardRef<NativeChatComposerHandle, NativeChatCo
         onDictationHoldEnd={dictation.stopHoldDictation}
         onSend={send}
         onStop={interrupt}
-        {...queue}
         sessionOptionsSurface={sessionOptionsSurface}
         sessionOptionsSnapshot={sessionOptionsSnapshot}
         contextUsage={contextUsageSummary}

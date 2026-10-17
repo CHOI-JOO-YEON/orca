@@ -1,4 +1,12 @@
-import { useImperativeHandle, useMemo, useState, type KeyboardEvent, type Ref } from 'react'
+import {
+  useImperativeHandle,
+  useMemo,
+  useState,
+  type HTMLAttributes,
+  type KeyboardEvent,
+  type Ref,
+  type RefObject
+} from 'react'
 import type { AiVaultSession } from '../../../../shared/ai-vault-types'
 import type { AiVaultListRow } from './AiVaultVirtualRow'
 
@@ -104,6 +112,23 @@ export function useAiVaultSessionListKeyboard(
     }),
     [activate, scrollToIndex, selectedIndex, selectedSession, selection]
   )
+}
+
+/** Panel root props: a clicked row cannot take focus, so it lands on the root and the row keys keep working. */
+export function aiVaultPanelKeyboardRootProps(
+  keyboardRef: RefObject<AiVaultSessionListKeyboard | null> | undefined
+): Pick<HTMLAttributes<HTMLElement>, 'tabIndex' | 'onKeyDown'> {
+  if (!keyboardRef) {
+    return {}
+  }
+  return {
+    tabIndex: -1,
+    onKeyDown: (event) => {
+      if (event.target === event.currentTarget) {
+        keyboardRef.current?.handleKeyDown(event)
+      }
+    }
+  }
 }
 
 function sessionIdAt(rows: readonly AiVaultListRow[], index: number): string | null {

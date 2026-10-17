@@ -1,12 +1,4 @@
-import {
-  useCallback,
-  useImperativeHandle,
-  useMemo,
-  useRef,
-  useState,
-  type ReactNode,
-  type Ref
-} from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { toast } from 'sonner'
 import { useAppStore } from '@/store'
@@ -41,36 +33,22 @@ import { useAiVaultPanelScope } from './use-ai-vault-panel-scope'
 import { usePersistedAiVaultViewOptions } from './use-persisted-ai-vault-view-options'
 import { AgentSessionContinuationDialog } from '@/components/agent-session-continuation/AgentSessionContinuationDialog'
 import { AiVaultScanIssueBanners } from './AiVaultScanIssueBanners'
+import { currentAiVaultScanIssueResult } from './ai-vault-scan-issue-state'
 import { useAiVaultSessionDeleteAction } from './ai-vault-session-delete-action'
 import { useAiVaultPanelSearch } from './use-ai-vault-search'
 import { aiVaultSearchScopeIdentity } from './ai-vault-search-scope-identity'
 import { AiVaultPanelSearch } from './AiVaultPanelSearch'
 import { useAiVaultPanelSessionResume } from './use-ai-vault-panel-session-resume'
-import type { AiVaultAgent, AiVaultScope } from '../../../../shared/ai-vault-types'
-import type { AiVaultPanelWorkspace } from './ai-vault-panel-workspace'
+import { AiVaultScanProgressStrip } from './AiVaultScanProgressStrip'
+import { useAiVaultScanProgress } from './ai-vault-scan-progress-store'
+import { LOCAL_EXECUTION_HOST_ID } from '../../../../shared/execution-host'
+import { aiVaultLocalScanKey } from '../../../../shared/ai-vault-local-scan-key'
 import { useAiVaultPanelWorkspace } from './use-ai-vault-panel-workspace'
-import type { AiVaultSessionListKeyboard } from './use-ai-vault-session-keyboard-navigation'
-
-export type AiVaultPanelHandle = {
-  /** Focuses the search box, first switching scope when one is given. */
-  focusSearch: (scope?: AiVaultScope) => void
-  /** Clears a non-empty search; false when there was nothing to clear. */
-  clearSearch: () => boolean
-}
-
-export type AiVaultPanelProps = {
-  ref?: Ref<AiVaultPanelHandle>
-  /** Absent means the active workspace. */
-  workspace?: AiVaultPanelWorkspace
-  /** Read once, at mount. */
-  initialQuery?: string
-  /** Read once, at mount; set, the panel filters agents on its own and never saves the filter. */
-  initialAgents?: readonly AiVaultAgent[]
-  headerAction?: ReactNode
-  /** Fires when a switch to an open session or a hand-off succeeds, which may leave the visible tab
-   *  as it was; its presence also turns on arrow/Enter row keys. */
-  onSessionOpened?: () => void
-}
+import {
+  aiVaultPanelKeyboardRootProps,
+  type AiVaultSessionListKeyboard
+} from './use-ai-vault-session-keyboard-navigation'
+import { useAiVaultPanelHandle, type AiVaultPanelProps } from './ai-vault-panel-handle'
 
 export default function AiVaultPanel({
   ref,
@@ -170,12 +148,28 @@ export default function AiVaultPanel({
   // enumerate, and a repo with hundreds of them has no path list a request can carry.
   const searchWithin = useMemo(
     () =>
-      aiVaultSearchScopeIdentity({ scope, activeWorktreeId: activeWorktree?.id, activeProjectKey }),
+      aiVaultSearchScopeIdentity({
+        scope,
+        activeWorktreeId: activeWorktree?.id,
+        activeProjectKey
+      }),
     [activeProjectKey, activeWorktree?.id, scope]
   )
   const search = useAiVaultPanelSearch(query, agents, searchWithin, executionHostScope, searchSort)
   const { searching, searchHits } = search
   const sessions = searching ? search.sessions : history
+  const requestedScanKey = aiVaultLocalScanKey({
+    scopePaths,
+    includeAntigravityIdeSessions: true,
+    limit: sessionLimit === 'unlimited' ? undefined : sessionLimit,
+    unlimited: sessionLimit === 'unlimited'
+  })
+  const scanProgress = useAiVaultScanProgress(
+    executionHostScope,
+    requestedScanKey,
+    scanResult?.scanId
+  )
+  const stripProgress = searching ? null : scanProgress
   // Deliberately blind to the active repo/worktree: rebuilding these session
   // maps on every worktree switch is what made switching visibly slow (#10841 era).
   const sessionProjectById = useMemo(
@@ -236,22 +230,12 @@ export default function AiVaultPanel({
     )
   }, [])
 
-  useImperativeHandle(
-    ref,
-    () => ({
-      focusSearch: (nextScope) => {
-        if (nextScope) {
-          handleScopeChange(nextScope)
-        }
-        setFocusSearchRequestId((id) => id + 1)
-      },
-      clearSearch: () => {
-        setQuery('')
-        return query !== ''
-      }
-    }),
-    [handleScopeChange, query]
-  )
+  useAiVaultPanelHandle(ref, {
+    query,
+    setQuery,
+    changeScope: handleScopeChange,
+    setFocusSearchRequestId
+  })
 
   const toggleGroup = useCallback((key: string) => {
     setCollapsedGroups((current) => {
@@ -265,22 +249,15 @@ export default function AiVaultPanel({
     })
   }, [])
 
-  const requestDelete = useAiVaultSessionDeleteAction({ refresh, onDeleted: search.onDeleted })
+  const requestDelete = useAiVaultSessionDeleteAction({
+    refresh,
+    onDeleted: search.onDeleted
+  })
 
   return (
     <div
       className="@container/ai-vault flex h-full min-h-0 flex-col bg-sidebar outline-none"
-      // Why: a clicked row cannot take focus, so it lands here and the row keys keep working.
-      tabIndex={keyboardRows ? -1 : undefined}
-      onKeyDown={
-        keyboardRows
-          ? (event) => {
-              if (event.target === event.currentTarget) {
-                listKeyboardRef.current?.handleKeyDown(event)
-              }
-            }
-          : undefined
-      }
+      {...aiVaultPanelKeyboardRootProps(keyboardRows ? listKeyboardRef : undefined)}
     >
       <AiVaultPanelHeader
         query={query}
@@ -314,13 +291,22 @@ export default function AiVaultPanel({
         onRefresh={() => (searching ? search.retry() : void refresh({ force: true }))}
       />
 
+      {stripProgress ? <AiVaultScanProgressStrip progress={stripProgress} /> : null}
+
       {!searching && error ? (
         <div className="border-b border-sidebar-border px-3 py-2 text-xs text-destructive">
           {error}
         </div>
       ) : null}
 
-      {!searching && <AiVaultScanIssueBanners scanResult={scanResult} />}
+      {!searching && (
+        <AiVaultScanIssueBanners
+          scanResult={currentAiVaultScanIssueResult(
+            scanResult,
+            loading && executionHostScope === LOCAL_EXECUTION_HOST_ID
+          )}
+        />
+      )}
       <AiVaultPanelSearch search={search} noAgents={agents.length === 0}>
         {searching
           ? filteredSessions.length > 0 && (
@@ -346,6 +332,7 @@ export default function AiVaultPanel({
             groups={groups}
             collapsedGroups={collapsedGroups}
             loading={searching ? search.loading : loading}
+            scanProgressShown={stripProgress !== null}
             sessionsCount={sessions.length}
             filteredSessionsCount={filteredSessions.length}
             noAgentsSelected={agents.length === 0}

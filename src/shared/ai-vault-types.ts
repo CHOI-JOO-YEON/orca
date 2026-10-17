@@ -244,6 +244,8 @@ export type AiVaultListArgs = {
 }
 
 export type AiVaultListResult = {
+  /** Local scan entry that produced this result; absent for remote and merged results. */
+  scanId?: string
   fingerprint?: string
   /** Requires the caller to reuse the exact previously received body. */
   unchanged?: true

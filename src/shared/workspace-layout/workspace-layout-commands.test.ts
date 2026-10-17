@@ -384,6 +384,80 @@ describe('layout command effects', () => {
     )
   })
 
+  it('a window drag-out names the tab, outranks a stale binding and moves a last pane', () => {
+    const { model, tabA, tabB, leafA2, leafB, ctx } = setup()
+    const workspace = model.workspaces[WS]!
+    const withData: WorkspaceLayoutModel = {
+      ...model,
+      workspaces: {
+        [WS]: {
+          ...workspace,
+          leaves: { ...workspace.leaves, [leafA2]: { ptyId: 'pty-old', incarnationId: 'inc' } }
+        }
+      }
+    }
+    const stale = build(
+      ctx,
+      [
+        {
+          type: 'movePaneToNewTab',
+          workspace: WS,
+          tabId: tabA,
+          leafId: leafA2,
+          windowDetach: { ptyId: 'pty-live', tabId: 'tab-main' }
+        }
+      ],
+      withData
+    )
+    expect(stale.results[0]).toEqual({ tabId: 'tab-main', ptyId: 'pty-live' })
+    expect(stale.model.workspaces[WS]!.leaves?.[leafA2]).toEqual({ ptyId: 'pty-live' })
+    // A copy that never bound the pane keeps its incarnation, as the desktop's move does.
+    const unbound = applyLayoutCommand(
+      {
+        ...model,
+        workspaces: {
+          [WS]: {
+            ...workspace,
+            leaves: { ...workspace.leaves, [leafA2]: { incarnationId: 'inc' } }
+          }
+        }
+      },
+      {
+        type: 'movePaneToNewTab',
+        workspace: WS,
+        tabId: tabA,
+        leafId: leafA2,
+        windowDetach: { ptyId: 'pty-live', tabId: 'tab-main' }
+      },
+      ctx
+    )
+    expect(unbound.ok && unbound.model.workspaces[WS]!.leaves?.[leafA2]).toEqual({
+      ptyId: 'pty-live',
+      incarnationId: 'inc'
+    })
+
+    // Main's copy lacks the window's other panes, so the tab stays for them (no rule check: to
+    // main's copy alone it reads as the tab re-ided).
+    const last = applyLayoutCommand(
+      model,
+      {
+        type: 'movePaneToNewTab',
+        workspace: WS,
+        tabId: tabB,
+        leafId: leafB,
+        windowDetach: { ptyId: null }
+      },
+      ctx
+    )
+    if (!last.ok) {
+      throw new Error(last.code)
+    }
+    const newTabId = last.result.tabId!
+    expect(terminalTab(last.model, newTabId).panes.root).toEqual({ type: 'leaf', leafId: leafB })
+    expect(terminalTab(last.model, tabB).panes.root).toBeNull()
+    expect(last.result.ptyId).toBeNull()
+  })
+
   it('equalizes same-axis panes into equal shares', () => {
     const { model, tabA, leafA2, ctx } = setup()
     const three = build(
@@ -507,5 +581,44 @@ describe('layout command effects', () => {
     expect(
       opened.model.workspaces[WS]!.tabs.find((tab) => tab.id === session!.tabId)
     ).toMatchObject({ kind: 'agent-session', entityId: 'sess-1', agentSessionAgent: 'codex' })
+  })
+
+  it('creates a terminal tab at the time the window drew it, else now', () => {
+    const ctx = testContext()
+    const { model, results } = build(ctx, [
+      { type: 'createTerminalTab', workspace: WS, createdAt: 42 },
+      { type: 'createTerminalTab', workspace: WS }
+    ])
+    expect(terminalTab(model, results[0]!.tabId!).createdAt).toBe(42)
+    expect(terminalTab(model, results[1]!.tabId!).createdAt).toBeGreaterThan(42)
+  })
+
+  it('forgets an ended launch agent on a terminal tab only', () => {
+    const ctx = testContext()
+    const { model, results } = build(ctx, [
+      { type: 'createTerminalTab', workspace: WS, creation: { launchAgent: 'claude' } },
+      {
+        type: 'openEditorTab',
+        workspace: WS,
+        fileId: '/w/a.ts',
+        contentType: 'editor',
+        file: { filePath: '/w/a.ts', relativePath: 'a.ts', language: 'typescript' }
+      }
+    ])
+    const [terminal, editor] = results
+    const cleared = build(
+      ctx,
+      [{ type: 'setTabProps', workspace: WS, tabId: terminal!.tabId!, clearLaunchAgent: true }],
+      model
+    ).model
+    expect(terminalTab(cleared, terminal!.tabId!).terminal).toEqual({ defaultTitle: 'Terminal 1' })
+    expect(
+      refusal(model, {
+        type: 'setTabProps',
+        workspace: WS,
+        tabId: editor!.tabId!,
+        clearLaunchAgent: true
+      })
+    ).toBe('invalid_params')
   })
 })

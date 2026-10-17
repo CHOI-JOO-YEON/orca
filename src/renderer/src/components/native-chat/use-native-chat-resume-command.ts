@@ -6,7 +6,8 @@ import type { AgentType } from '../../../../shared/agent-status-types'
 import { isAiVaultAgent } from '../../../../shared/ai-vault-types'
 import { selectAiVaultPanelWorkspace } from '../right-sidebar/ai-vault-panel-workspace'
 import { openAgentSessionHistoryModal } from '../right-sidebar/agent-session-history-modal'
-import type { ComposerAutocomplete, NativeChatPickerItem } from './native-chat-composer-state'
+import type { NativeChatPickerItem } from './native-chat-composer-state'
+import type { NativeChatPickerState } from './use-native-chat-picker-state'
 import { findNativeChatTabOwnerWorktreeId } from './native-chat-file-link'
 import type { NativeChatComposerInput } from './native-chat-composer-input'
 import type { NativeChatStructuredComposerTransport } from './native-chat-composer-types'
@@ -46,8 +47,7 @@ export type NativeChatResumeCommand = {
   consume: (draft: string) => boolean
   /** Choosing the draft-leading Orca row runs it; mid-prompt it stays an ordinary completion. */
   interceptPick: <TItem extends NativeChatPickerItem>(
-    pick: (item: TItem) => void,
-    autocomplete: ComposerAutocomplete
+    pick: (item: TItem) => void
   ) => (item: TItem) => void
 }
 
@@ -58,16 +58,16 @@ export function useNativeChatResumeCommand(args: {
   /** The chat's recorded provider. */
   agent: AgentType
   terminalTabId: string
-  /** A skill row the user picked keeps going to the agent, even one named `resume`. */
-  isPickedSkill: (draft: string) => boolean
-  clearSkillOrigin: () => void
+  /** `isPickedSkill`: a skill row the user picked keeps going to the agent, even one named `resume`. */
+  picker: Pick<NativeChatPickerState, 'autocomplete' | 'isPickedSkill' | 'clearSkillOrigin'>
   textareaRef: RefObject<NativeChatComposerInput | null>
   setDraft: (value: string) => void
   setCaret: Dispatch<SetStateAction<number>>
   setActiveSuggestion: Dispatch<SetStateAction<number>>
   setNotice: (notice: string | null) => void
 }): NativeChatResumeCommand {
-  const { structuredTransport, agent, terminalTabId, isPickedSkill, clearSkillOrigin } = args
+  const { structuredTransport, agent, terminalTabId } = args
+  const { autocomplete, isPickedSkill, clearSkillOrigin } = args.picker
   const { textareaRef, setDraft, setCaret, setActiveSuggestion, setNotice } = args
   const structured = structuredTransport !== undefined
   const structuredWorktreeId = structuredTransport?.worktreeId
@@ -132,10 +132,7 @@ export function useNativeChatResumeCommand(args: {
   )
 
   const interceptPick = useCallback(
-    <TItem extends NativeChatPickerItem>(
-      pick: (item: TItem) => void,
-      autocomplete: ComposerAutocomplete
-    ) =>
+    <TItem extends NativeChatPickerItem>(pick: (item: TItem) => void) =>
       (item: TItem) => {
         const leading = autocomplete.mode === 'slash' && autocomplete.dispatchable
         // Choosing Orca's own row is explicit, so an earlier skill pick of the same name doesn't count.
@@ -146,7 +143,7 @@ export function useNativeChatResumeCommand(args: {
         }
         pick(item)
       },
-    [clearSkillOrigin, open]
+    [autocomplete, clearSkillOrigin, open]
   )
 
   return { consume, interceptPick }

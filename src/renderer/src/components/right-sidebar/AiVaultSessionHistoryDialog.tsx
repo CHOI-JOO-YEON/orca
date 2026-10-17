@@ -7,7 +7,8 @@ import { Dialog, DialogClose, DialogContent, DialogTitle } from '@/components/ui
 import { ShortcutKeyCombo } from '@/components/ShortcutKeyCombo'
 import { translate } from '@/i18n/i18n'
 import { AI_VAULT_AGENTS, aiVaultHistoryAgents } from '../../../../shared/ai-vault-types'
-import AiVaultPanel, { type AiVaultPanelHandle } from './AiVaultPanel'
+import AiVaultPanel from './AiVaultPanel'
+import type { AiVaultPanelHandle } from './ai-vault-panel-handle'
 import { readAgentSessionHistoryModalRequest } from './agent-session-history-modal'
 
 /** The tabs on screen: the active workspace's focused tab, and the chat workspace's (it may float). */

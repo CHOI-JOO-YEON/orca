@@ -37,12 +37,14 @@ vi.mock('react-native', async () => {
       React.useImperativeHandle(ref, () => ({ scrollToEnd: vi.fn(), scrollToOffset: vi.fn() }), [])
       return React.createElement('FlatList', props)
     }),
+    Platform: { OS: 'ios' },
     Pressable: 'Pressable',
     StyleSheet: { create: (styles: unknown) => styles, hairlineWidth: 1, absoluteFillObject: {} },
     Text: 'Text',
     View: 'View'
   }
 })
+vi.mock('../platform/use-reduced-motion', () => ({ useReducedMotionEnabled: () => null }))
 vi.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 })
 }))
@@ -61,6 +63,9 @@ vi.mock('lucide-react-native', () => ({
   Square: 'Square'
 }))
 vi.mock('./MobileNativeChatMessage', () => ({ MobileNativeChatMessage: 'ChatMessage' }))
+vi.mock('./MobileNativeChatMessageActionsSheet', () => ({
+  MobileNativeChatMessageActionsSheet: 'MessageActionsSheet'
+}))
 vi.mock('./MobileNativeChatLiveLine', () => ({ MobileNativeChatLiveLine: 'LiveStatus' }))
 vi.mock('./MobileNativeChatComposer', () => ({ MobileNativeChatComposer: 'Composer' }))
 vi.mock('./MobileNativeChatQueuedMessages', () => ({ MobileNativeChatQueuedMessages: 'Queued' }))
@@ -90,7 +95,10 @@ const HOST_SUPPORT = {
   queuedMessages: true,
   queuedCommands: false,
   statusFeed: true,
-  quietRepeatedStop: true
+  quietRepeatedStop: true,
+  sendOptions: false,
+  conversationStop: false,
+  permissionModes: false
 }
 
 type Phone = {
@@ -228,6 +236,7 @@ async function mountPhone(): Promise<Phone> {
       sendErrorMessage: null,
       onClearSendError: () => {},
       sendSurfaceId: 'host\0workspace\0tab',
+      sessionId: null,
       getSendCompletionGeneration: () => 0,
       keyboardInset: 0
     })
