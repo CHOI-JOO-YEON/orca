@@ -3,7 +3,6 @@ import { useManagedRuntimeInstallCard } from '@/components/managed-runtime/use-m
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import { translate } from '@/i18n/i18n'
-import { cn } from '@/lib/utils'
 import { NativeChatInstallTile } from './NativeChatInstallTile'
 import type { NativeChatInstallSlotInstall } from './NativeChatInstallSlot'
 
@@ -47,7 +46,7 @@ export function NativeChatInstallStrip(props: {
         {progress ? (
           <Progress
             value={progress.percent ?? 100}
-            className={cn('mt-2 h-1.5', progress.percent === null && 'animate-pulse')}
+            className="mt-2 h-1.5"
             aria-label={translate('components.managed-runtime.progress', '{{agent}} download', {
               agent: agentLabel
             })}

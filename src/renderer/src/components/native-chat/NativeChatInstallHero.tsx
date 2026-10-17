@@ -40,7 +40,7 @@ export function NativeChatInstallHero(props: {
           <div className="mt-3 w-full">
             <Progress
               value={progress.percent ?? 100}
-              className={cn('h-1.5', progress.percent === null && 'animate-pulse')}
+              className="h-1.5"
               aria-label={translate('components.managed-runtime.progress', '{{agent}} download', {
                 agent: agentLabel
               })}
@@ -86,7 +86,7 @@ export function NativeChatInstallHero(props: {
         {action ? (
           <Button
             variant={action.kind === 'cancel' ? 'ghost' : 'default'}
-            className={cn('mt-5', action.kind === 'cancel' && 'mt-1 text-chat-foreground-faint')}
+            className={action.kind === 'cancel' ? 'mt-1' : 'mt-5'}
             disabled={pending}
             onClick={() => act(action)}
           >
