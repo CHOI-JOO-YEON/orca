@@ -1,5 +1,6 @@
 import { Component, type RefObject } from 'react'
 import { Platform } from 'react-native'
+import { scrollWritesStopMomentum } from './mobile-native-chat-page-motion'
 import type { MobileNativeChatRowKeys } from './mobile-native-chat-row-keys'
 
 type Box = { top: number; bottom: number }
@@ -27,6 +28,7 @@ type Props = {
   listRef: RefObject<{
     getScrollableNode: () => Scroller | null | undefined
     keepInPlace?: (drift: number) => void
+    holdPlace?: (on: boolean) => void
   } | null>
 }
 
@@ -115,6 +117,22 @@ function drawn(unit: Unit, rows: Map<string, Tagged>, keys: Props['rowKeys']): T
   return row && tagged(row, MEMBER).find((m) => m.id === member || m.id === paired)?.node
 }
 
+/** The update moves what the reader reads to another row (a line to another group, a row placed by
+ *  another message): the browser's anchoring loses that node, so the hold puts it back. */
+function moves(unit: Unit | undefined, keys: Props['rowKeys']): boolean {
+  if (!unit) {
+    return false
+  }
+  if (unit.member === undefined) {
+    return keys.placement(unit.key) !== unit.placed
+  }
+  // An orphan result's line goes to its call's row once the call lands, and its old row stays.
+  return (
+    unit.member.startsWith('result:') ||
+    (unit.member !== 'run' && keys.current(unit.key) !== unit.key)
+  )
+}
+
 /** iOS is still bouncing the list past an end. A write then lands while WebKit owns the scroll, and
  *  the list stops taking the reader's scrolls until they leave the chat. */
 function overscrolled({ scrollTop, scrollHeight, clientHeight }: Scroller): boolean {
@@ -123,9 +141,11 @@ function overscrolled({ scrollTop, scrollHeight, clientHeight }: Scroller): bool
 
 /** Keeps a parked reader's place on the page when the source window changes above them (an older
  *  page, a cap trim) or the rows regroup (Tools, text size): the first part of what they were reading that the update kept goes back where
- *  it was. A following reader is left to the follow owner, which holds the end. A class because
- *  only `getSnapshotBeforeUpdate` sees the rows before the update is in the document. A native list
- *  holds its own place (`maintainVisibleContentPosition`). */
+ *  it was. Where the browser has scroll anchoring it keeps the place through ordinary changes, so the
+ *  hold runs only for a regroup or a move to another row, with the browser's anchoring off from
+ *  before the update until its correction. A following reader is left to the follow owner, which
+ *  holds the end. A class because only `getSnapshotBeforeUpdate` sees the rows before the update is
+ *  in the document. A native list holds its own place (`maintainVisibleContentPosition`). */
 export class MobileNativeChatScrollHold extends Component<Props> {
   getSnapshotBeforeUpdate(previous: Props): Unit[] | null {
     // Another chat opens at its end, which the follow owner resets only after this reads it.
@@ -138,14 +158,33 @@ export class MobileNativeChatScrollHold extends Component<Props> {
     ) {
       return null
     }
-    const scroller = this.props.listRef.current?.getScrollableNode()
-    return scroller && !overscrolled(scroller) ? placeOnScreen(scroller, previous.rowKeys) : null
+    const list = this.props.listRef.current
+    const scroller = list?.getScrollableNode()
+    const held = scroller && !overscrolled(scroller) ? placeOnScreen(scroller, previous.rowKeys) : null
+    const regrouped = previous.layoutKey !== this.props.layoutKey
+    if (!held || (!scrollWritesStopMomentum() && !regrouped && !moves(held[0], this.props.rowKeys))) {
+      return null
+    }
+    list?.holdPlace?.(true)
+    return held
   }
 
   componentDidUpdate(_previous: Props, _state: unknown, held: Unit[] | null): void {
+    if (!held) {
+      return
+    }
+    try {
+      this.restore(held)
+    } finally {
+      // Whatever the correction did, the scroll goes back to its owner.
+      this.props.listRef.current?.holdPlace?.(false)
+    }
+  }
+
+  private restore(held: Unit[]): void {
     const list = this.props.listRef.current
-    const scroller = held?.length ? list?.getScrollableNode() : null
-    if (!held || !scroller) {
+    const scroller = held.length ? list?.getScrollableNode() : null
+    if (!scroller) {
       return
     }
     const rows = new Map(tagged(scroller, ROW).map(({ id, node }) => [id, node]))

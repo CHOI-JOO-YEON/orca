@@ -2,10 +2,20 @@ import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { NativeChatMessage } from '../../../src/shared/native-chat-types'
 import type { MobileNativeChatRowKeys } from './mobile-native-chat-row-keys'
 import { MobileNativeChatPageHeights } from './mobile-native-chat-page-heights'
-import { MobileNativeChatPageMotion } from './mobile-native-chat-page-motion'
+import { MobileNativeChatPageAnchoring } from './mobile-native-chat-page-anchoring'
+import {
+  MobileNativeChatPageMotion,
+  scrollWritesStopMomentum
+} from './mobile-native-chat-page-motion'
 import { MobileNativeChatPageRows } from './mobile-native-chat-page-rows'
-import type { MobileNativeChatTurnRow } from './use-mobile-native-chat-turn-disclosure'
 import { coverMobileNativeChatWindow } from './mobile-native-chat-page-window-coverage'
+import type {
+  MobileNativeChatWindowDrawn as Drawn,
+  MobileNativeChatWindowGroup as Group,
+  MobileNativeChatWindowRowState as RowState,
+  MobileNativeChatWindowScroller,
+  MobileNativeChatWindowSeat as Win
+} from './mobile-native-chat-page-window-state'
 import { useMobileNativeChatPageRender } from './use-mobile-native-chat-page-render'
 
 /** Rows measured in one settled moment: few enough not to drop a frame. */
@@ -16,48 +26,9 @@ const MEASURE_GAP_MS = 32
 const MEASURE_REACH = 3
 /** While following, every measured row is checked for a change at most this often. */
 const STALE_SCAN_MS = 1_000
-
-type Box = { top: number; bottom: number }
-type Measured = { getBoundingClientRect: () => Box }
-
-export type MobileNativeChatWindowScroller = Measured & {
-  scrollTop: number
-  scrollHeight: number
-  clientHeight: number
-  clientWidth: number
-  addEventListener: (type: string, listener: () => void, options: { passive: true }) => void
-  removeEventListener: (type: string, listener: () => void) => void
-}
-
-type RowState = (index: number, row: NativeChatMessage) => MobileNativeChatTurnRow
-type Group = { from: string; fromAt: number; to: string; toAt: number }
-
-/** Where the window stands, by key, so landings and trims never change which rows are drawn. */
-type Win = {
-  scope: string
-  first: string
-  firstAt: number
-  last: string | null
-  lastAt: number
-  /** Measured rows trimmed from above a parked reader: their height stays until settled. */
-  slack: number
-  /** Rows drawn in place above the window only so they get measured. */
-  measure: Group | null
-}
-
-type Drawn = {
-  keys: readonly string[]
-  rows: readonly NativeChatMessage[]
-  indexOf: (key: string | undefined) => number | undefined
-  rowState: RowState
-  start: number
-  end: number
-  /** The first row in the document: rows above it were never measured. */
-  first: number
-  sourceHead: string | undefined
-  following: boolean
-  layoutKey: string
-}
+/** While following, measuring waits until a streaming reply pauses this long, so its updates keep
+ *  the frames. */
+const STREAM_PAUSE_MS = 300
 
 /** The page's rows near the screen, keyed. Above the window the spacer stands only for measured rows:
  *  rows never measured are left out, and are measured in place only while nothing can move the
@@ -67,10 +38,12 @@ export function useMobileNativeChatPageWindow(args: {
   rowKeys: Pick<MobileNativeChatRowKeys, 'scope' | 'sourceHead' | 'keyOf' | 'current'>
   rowState: RowState
   following: boolean
+  /** At event time, before a re-render lands. */
+  isFollowing: () => boolean
   layoutKey: string
   scroller: () => MobileNativeChatWindowScroller | null | undefined
 }) {
-  const { rows, rowKeys, rowState, following, layoutKey, scroller } = args
+  const { rows, rowKeys, rowState, following, isFollowing, layoutKey, scroller } = args
   const render = useMobileNativeChatPageRender()
   const [heights] = useState(() => new MobileNativeChatPageHeights())
   const w = useRef<Win | null>(null)
@@ -81,8 +54,10 @@ export function useMobileNativeChatPageWindow(args: {
   const width = useRef(0)
   const viewport = useRef(globalThis.innerHeight || 800)
   const lastScan = useRef(0)
+  const streamedAt = useRef(0)
   const onSettled = useRef(() => {})
   const [motion] = useState(() => new MobileNativeChatPageMotion(() => onSettled.current()))
+  const [anchoring] = useState(() => new MobileNativeChatPageAnchoring(scroller, isFollowing))
   const keys = useMemo(() => rows.map(rowKeys.keyOf), [rows, rowKeys.keyOf])
   const indexOf = useMemo(() => {
     let map: Map<string, number> | undefined
@@ -150,6 +125,10 @@ export function useMobileNativeChatPageWindow(args: {
 
   const takeAnchor = useCallback(
     (s: MobileNativeChatWindowScroller) => {
+      // Elsewhere the browser's anchoring keeps a parked place and the end pin a following one.
+      if (!scrollWritesStopMomentum()) {
+        return
+      }
       const at = drawn.current
       // A following reader is held by the end pin: the row's own top is enough there.
       drawnRows.takeAnchor(s, at?.keys ?? [], [at?.start ?? 0, at?.end ?? 0], !at?.following)
@@ -205,6 +184,11 @@ export function useMobileNativeChatPageWindow(args: {
     if (cur.measure && heights.px(cur.measure.to) === undefined) {
       return
     }
+    const streaming = STREAM_PAUSE_MS - (Date.now() - streamedAt.current)
+    if (at.following && streaming > 0) {
+      motion.pokeIn(streaming)
+      return
+    }
     const since = Date.now() - lastScan.current
     const full = at.following && at.first === 0 && since >= STALE_SCAN_MS
     const run = heights.next(at, layout, MEASURE_REACH * viewport.current, MEASURE_ROWS, full)
@@ -238,9 +222,13 @@ export function useMobileNativeChatPageWindow(args: {
     const m = m0 < m1 ? { from: keys[m0]!, fromAt: m0, to: keys[m1 - 1]!, toAt: m1 - 1 } : null
     const seat = { first: keys[start] ?? '', firstAt: start, last, lastAt: end - 1 }
     w.current = { ...win, ...seat, slack, measure: m }
+    if (drawn.current && drawn.current.rows !== rows && following) {
+      streamedAt.current = Date.now()
+    }
     const fresh = { keys, rows, indexOf, rowState, start, end, first, following, layoutKey }
     drawn.current = { ...fresh, sourceHead: rowKeys.sourceHead }
     settle.current = false
+    anchoring.sync()
     const s = scroller()
     if (s && anchorStale.current) {
       anchorStale.current = false
@@ -264,6 +252,9 @@ export function useMobileNativeChatPageWindow(args: {
       const { by } = motion.scrolled(s.scrollTop, max, () => drawnRows.placeMoved(s))
       if (by === 'reader') {
         takeAnchor(s)
+      }
+      // Where the browser keeps the place, the page writes no correction to wait for.
+      if (by === 'reader' || (by === 'layout' && !scrollWritesStopMomentum())) {
         cover(s)
       }
     }
@@ -335,12 +326,14 @@ export function useMobileNativeChatPageWindow(args: {
       keepInPlace,
       observeWith: drawnRows.observeWith,
       settled: () => motion.whenSettled(),
+      syncAnchoring: () => anchoring.sync(),
+      holdPlace: (on: boolean) => anchoring.hold(on),
       watchReader: (fn: ((moved: number, fromEnd: number) => void) | null) => {
         motion.onReader = fn
       },
       wrote: (target: number) => motion.wrote(target)
     }),
-    [afterResize, keepInPlace, drawnRows, motion]
+    [afterResize, keepInPlace, drawnRows, motion, anchoring]
   )
 
   return {

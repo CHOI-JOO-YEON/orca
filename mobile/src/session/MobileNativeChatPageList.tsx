@@ -16,19 +16,18 @@ import type { NativeChatMessage } from '../../../src/shared/native-chat-types'
 import { MobileNativeChatKeptScope } from './mobile-native-chat-kept-disclosures'
 import type { MobileNativeChatRowKeys } from './mobile-native-chat-row-keys'
 import { styles } from './mobile-native-chat-view-styles'
-import { MobileNativeChatPageScroll } from './MobileNativeChatPageScroll'
+import { MobileNativeChatPageScroll, outOfAnchoring } from './MobileNativeChatPageScroll'
 import type { MobileNativeChatListHandle } from './use-mobile-native-chat-tail-follow'
 import type { MobileNativeChatTurnRow } from './use-mobile-native-chat-turn-disclosure'
-import {
-  useMobileNativeChatPageWindow,
-  type MobileNativeChatWindowScroller
-} from './use-mobile-native-chat-page-window'
+import type { MobileNativeChatWindowScroller } from './mobile-native-chat-page-window-state'
+import { useMobileNativeChatPageWindow } from './use-mobile-native-chat-page-window'
 
 type Row = { item: NativeChatMessage; index: number }
 
 type Props = {
   ref: Ref<MobileNativeChatListHandle>
   endAnchored: boolean
+  isFollowing: () => boolean
   pin: () => void
   rows: readonly NativeChatMessage[]
   rowKeys: Pick<MobileNativeChatRowKeys, 'scope' | 'sourceHead' | 'keyOf' | 'current'>
@@ -48,6 +47,7 @@ type Props = {
 export function MobileNativeChatPageList({
   ref,
   endAnchored,
+  isFollowing,
   pin,
   rows,
   rowKeys,
@@ -69,6 +69,7 @@ export function MobileNativeChatPageList({
     rowKeys,
     rowState,
     following: endAnchored,
+    isFollowing,
     layoutKey,
     scroller
   })
@@ -113,17 +114,18 @@ export function MobileNativeChatPageList({
       onScroll={onScroll}
       scrollEventThrottle={32}
     >
-      {header(view.measuring)}
+      {/* Never what the browser's anchoring holds: rows land below it, and spacers stand in for rows. */}
+      <View style={outOfAnchoring}>{header(view.measuring)}</View>
       {rows.length === 0 ? (
         emptyStateView
       ) : (
         // Rows unmount once scrolled past; what the reader opened in this chat outlives them.
         <MobileNativeChatKeptScope key={rowKeys.scope}>
-          <View style={{ height: view.above }} />
+          <View style={[outOfAnchoring, { height: view.above }]} />
           {rows.slice(view.m0, view.m1).map((item, at) => drawRow(item, view.m0 + at))}
-          <View style={{ height: view.mid }} />
+          <View style={[outOfAnchoring, { height: view.mid }]} />
           {rows.slice(view.start, view.end).map((item, at) => drawRow(item, view.start + at))}
-          <View style={{ height: view.bottom }} />
+          <View style={[outOfAnchoring, { height: view.bottom }]} />
         </MobileNativeChatKeptScope>
       )}
       {footer}

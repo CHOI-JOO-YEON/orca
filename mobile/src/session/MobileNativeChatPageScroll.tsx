@@ -1,9 +1,8 @@
 import type { Ref } from 'react'
 import { ScrollView, StyleSheet, View, type ScrollViewProps, type ViewStyle } from 'react-native'
 
-/** The page's scroller, with the transcript never in the browser's scroll anchoring: only the page
- *  moves the scroll (its end pin, its corrections), the same on every browser (WebKit has none), so
- *  no move of the browser's is taken for the reader's. */
+/** The page's scroller. Where the browser has scroll anchoring it keeps a parked reader's place;
+ *  the page turns it off on the scroller itself while it owns the scroll (following, a place-hold). */
 export function MobileNativeChatPageScroll({
   ref,
   children,
@@ -12,15 +11,18 @@ export function MobileNativeChatPageScroll({
 }: ScrollViewProps & { ref?: Ref<ScrollView> }) {
   return (
     <ScrollView ref={ref} {...props} contentContainerStyle={pageScroll.fill}>
-      <View style={[contentContainerStyle, pageScroll.outOfAnchoring]}>{children}</View>
+      <View style={contentContainerStyle}>{children}</View>
     </ScrollView>
   )
 }
 
 // RN Web passes it through to CSS; ViewStyle doesn't name it.
-const outOfAnchoring: ViewStyle & { overflowAnchor: 'none' } = { overflowAnchor: 'none' }
+const anchorless: ViewStyle & { overflowAnchor: 'none' } = { overflowAnchor: 'none' }
 
 const pageScroll = StyleSheet.create({
   fill: { flexGrow: 1 },
-  outOfAnchoring
+  anchorless
 })
+
+/** Never the node the browser's anchoring holds. */
+export const outOfAnchoring = pageScroll.anchorless

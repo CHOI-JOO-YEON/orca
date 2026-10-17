@@ -9,22 +9,25 @@ const scrollToOffset = vi.hoisted(() => vi.fn())
 const platform = vi.hoisted(() => ({ OS: 'ios' }))
 // The page list's live DOM geometry.
 const pageScroller = vi.hoisted(() => {
-  const listeners = new Map<string, Set<() => void>>()
+  const listeners = new Map<string, Set<(event?: unknown) => void>>()
   return {
     scrollTop: 0,
     scrollHeight: 0,
     clientHeight: 500,
     clientWidth: 320,
+    style: { overflowAnchor: '' },
     getInnerViewNode: () => ({}),
     getBoundingClientRect: () => ({ top: 0, bottom: 500 }),
-    addEventListener: (type: string, listener: () => void) => {
+    addEventListener: (type: string, listener: (event?: unknown) => void) => {
       listeners.set(type, (listeners.get(type) ?? new Set()).add(listener))
     },
-    removeEventListener: (type: string, listener: () => void) => {
+    removeEventListener: (type: string, listener: (event?: unknown) => void) => {
       listeners.get(type)?.delete(listener)
     },
     // The browser's scroll event at the scroller's current position.
-    scroll: () => listeners.get('scroll')?.forEach((listener) => listener())
+    scroll: () => listeners.get('scroll')?.forEach((listener) => listener()),
+    // The reader's hand on the scroller, e.g. a wheel turn.
+    input: (type: string) => listeners.get(type)?.forEach((listener) => listener())
   }
 })
 const getScrollableNode = vi.hoisted(() => () => pageScroller)
@@ -637,6 +640,7 @@ describe('MobileNativeChatView', () => {
     beforeEach(() => {
       platform.OS = 'web'
       Object.assign(pageScroller, { scrollTop: 0, scrollHeight: 0, clientHeight: 500 })
+      pageScroller.style.overflowAnchor = ''
       scrollToOffset.mockImplementation((to: { offset: number }) => {
         pageScroller.scrollTop = to.offset
       })
@@ -697,7 +701,8 @@ describe('MobileNativeChatView', () => {
       expect(scrollToOffset).toHaveBeenLastCalledWith({ animated: false, offset: 4_900 })
       scrollTo(4_900, 5_400)
 
-      // Nothing explains this move up but the reader: it leaves the end.
+      // The reader's wheel moves it up: it leaves the end.
+      pageScroller.input('wheel')
       scrollTo(3_000, 5_400)
       pageScroller.scrollHeight = 6_000
       resized()
@@ -717,33 +722,32 @@ describe('MobileNativeChatView', () => {
       expect(scrollToEnd).not.toHaveBeenCalled()
     })
 
-    // What the page's scroller tells the browser: the transcript's wrapper, its only child.
-    function transcriptStyle(): unknown[] {
-      const [content, ...rest] = page().children.filter(
-        (child): child is ReactTestInstance => typeof child !== 'string'
-      )
-      expect(rest).toHaveLength(0)
-      return content!.props.style
-    }
-
-    it('keeps the transcript out of the browser anchoring, following or parked', async () => {
-      const turns = ['a1', 'a2', 'a3', 'a4'].map((id) => assistantTurn(id, id))
-      const jumps = () =>
-        renderer!.root.findAll((node) => node.props.accessibilityLabel === 'Scroll to latest')
-      await render({ folded: turns.slice(0, 3) })
+    it('lets the browser hold a parked place, and never takes its moves for the reader', async () => {
+      const now = vi.spyOn(Date, 'now').mockReturnValue(10_000)
+      // Who holds the place: the browser's anchoring while parked, the end pin while following.
+      const browserHolds = () => pageScroller.style.overflowAnchor === 'auto'
+      await render({ folded: ['a1', 'a2', 'a3'].map((id) => assistantTurn(id, id)) })
       scrollTo(500, 1_000)
+      expect(browserHolds()).toBe(false)
 
-      // Trim plus append of the same height: no size change, so the owner rightly does nothing.
-      await update({ folded: turns.slice(1) })
-      expect(scrollToOffset).not.toHaveBeenCalled()
-      expect(jumps()).toHaveLength(0)
-      expect(transcriptStyle()).toContainEqual({ overflowAnchor: 'none' })
+      // The reader wheels up to just short of the end: parked.
+      pageScroller.input('wheel')
+      scrollTo(450, 1_000)
+      expect(browserHolds()).toBe(true)
+
+      // Later a row above grows and the browser keeps the place: that move down near the end is
+      // not the reader's, so it doesn't follow again, and the page writes nothing.
+      now.mockReturnValue(20_000)
+      scrollTo(690, 1_240)
       resized()
+      expect(browserHolds()).toBe(true)
+      expect(scrollToOffset).not.toHaveBeenCalled()
 
-      // Parked, the page alone keeps the place, so the browser still anchors nothing.
-      scrollTo(300, 1_000)
-      expect(jumps()).toHaveLength(1)
-      expect(transcriptStyle()).toContainEqual({ overflowAnchor: 'none' })
+      // The reader's own wheel back to the end follows again.
+      pageScroller.input('wheel')
+      scrollTo(740, 1_240)
+      expect(browserHolds()).toBe(false)
+      now.mockRestore()
     })
 
     it('loads older history from the Load earlier control, not from reaching the top', async () => {

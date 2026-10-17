@@ -65,6 +65,10 @@ export type MobileNativeChatListHandle = {
   settled?: () => Promise<void>
   /** Page only: called with each scroll the reader made (not the page's writes or layout). */
   watchReader?: (fn: ((moved: number, fromEnd: number) => void) | null) => void
+  /** Page only: following changed, which decides whether the browser's anchoring may move it. */
+  syncAnchoring?: () => void
+  /** Page only: the place-hold takes the scroll from the browser's anchoring for its correction. */
+  holdPlace?: (on: boolean) => void
 }
 
 export type MobileNativeChatTailFollow = {
@@ -74,6 +78,7 @@ export type MobileNativeChatTailFollow = {
   pageListProps: {
     ref: (list: MobileNativeChatListHandle | null) => () => void
     endAnchored: boolean
+    isFollowing: () => boolean
     pin: () => void
   }
   /** Render flag for the jump-to-latest control. */
@@ -135,6 +140,8 @@ export function useMobileNativeChatTailFollow(args: {
       return
     }
     followingRef.current = next
+    // Before any write or commit: the browser's anchoring and the end pin never both hold the place.
+    listRef.current?.syncAnchoring?.()
     setFollowingFlag(next)
   }, [])
 
@@ -306,7 +313,7 @@ export function useMobileNativeChatTailFollow(args: {
 
   return {
     listProps: { ref: attachList },
-    pageListProps: { ref: attachList, endAnchored: following, pin: pinPageToEnd },
+    pageListProps: { ref: attachList, endAnchored: following, isFollowing, pin: pinPageToEnd },
     showJumpToTail: !following && !atTail,
     pinToTail,
     pinToTailAfterContentResize,
