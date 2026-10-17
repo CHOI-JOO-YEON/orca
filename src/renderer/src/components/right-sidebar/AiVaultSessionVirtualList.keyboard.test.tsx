@@ -54,9 +54,9 @@ vi.mock('@/lib/structured-agent-session-launch-admission', async (importOriginal
   })
 }))
 // What the host reports for each chat; an untouched one has no message yet.
-const hostStatus = vi.hoisted(
-  () => new Map<string, { status: null; providerSession?: { id: string } }>()
-)
+const hostStatus = vi.hoisted(() => new Map<string, { status: null }>())
+const toastError = vi.hoisted(() => vi.fn())
+vi.mock('sonner', () => ({ toast: { error: toastError } }))
 vi.mock('@/runtime/structured-agent-session-status-feed', () => ({
   getStructuredAgentSessionStatusFeed: () => ({
     getSnapshot: () => hostStatus,
@@ -185,6 +185,7 @@ function selectedTitle(): string | null {
 
 beforeEach(() => {
   hostStatus.clear()
+  toastError.mockClear()
   // Why: happy-dom has no layout; give the virtualizer a bounded viewport and fixed rows.
   vi.stubGlobal('ResizeObserver', NoopResizeObserver)
   vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockImplementation(function (
@@ -300,16 +301,23 @@ describe('Session History keyboard selection', () => {
     expect(order()).toEqual([resumed, 'other'])
   })
 
-  it("closes the picker for this chat's own conversation even when its row predates the takeover", async () => {
+  it('closes the picker, with no error, when the host says this chat already holds the row', async () => {
     const workspaceId = 'repo-1::/repo'
     useAppStore.setState(useAppStore.getInitialState(), true)
+    useAppStore.setState({ activeWorktreeId: workspaceId })
     useAppStore.getState().createUnifiedTab(workspaceId, 'agent-session', {
       id: 'old',
       entityId: 'old',
       executionHostId: LOCAL_EXECUTION_HOST_ID,
       agentSessionAgent: 'claude'
     })
-    hostStatus.set('old', { status: null, providerSession: { id: sessions[0].sessionId } })
+    // A row listed before the takeover carries no link; only the host's refusal names the owner.
+    const owner = { sessionId: 'old', workspaceId }
+    const refusal = {
+      code: 'agent_session_conflict',
+      details: { reason: 'conversationHeldElsewhere', owner }
+    }
+    launch.settlement = { kind: 'failed', error: Object.assign(new Error('refused'), { refusal }) }
     const dismiss = vi.fn()
     const { press } = renderList({
       resumeHere: { tabId: 'old', workspaceId, agent: 'claude', dismiss }
@@ -319,6 +327,7 @@ describe('Session History keyboard selection', () => {
       await new Promise((resolve) => setTimeout(resolve, 0))
     })
     expect(dismiss).toHaveBeenCalledOnce()
+    expect(toastError).not.toHaveBeenCalled()
     expect(useAppStore.getState().groupsByWorktree[workspaceId]?.[0]?.tabOrder).toEqual(['old'])
   })
 })

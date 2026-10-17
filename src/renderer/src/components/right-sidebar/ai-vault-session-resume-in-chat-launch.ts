@@ -22,8 +22,9 @@ export type AiVaultChatReplacement = {
   afterTabId: string
   /** Told the new tab's id once it opens. */
   focusIntent: NativeChatComposerFocusIntent
-  /** Called exactly once; null when no launch began. */
-  onSettled: (settlement: StructuredAgentLaunchSettlement | null) => void
+  /** Called exactly once; null when no launch began. True: it accounted for a failure itself,
+   *  so no failure toast. */
+  onSettled: (settlement: StructuredAgentLaunchSettlement | null) => boolean
 }
 
 export function activateAiVaultResumeWorkspace(workspaceId: string): boolean {
@@ -70,10 +71,10 @@ export async function resumeAiVaultSessionInNewChat(
       return
     }
     void launch.settlement.then((settlement) => {
-      if (settlement.kind === 'failed' && !settlement.notified) {
+      const handled = replacing?.onSettled(settlement) === true
+      if (settlement.kind === 'failed' && !settlement.notified && !handled) {
         notifyAiVaultSessionResumeInChatFailure(settlement.error, rowAgent)
       }
-      replacing?.onSettled(settlement)
     })
   } catch (error) {
     notifyAiVaultSessionResumeInChatFailure(error, rowAgent)
