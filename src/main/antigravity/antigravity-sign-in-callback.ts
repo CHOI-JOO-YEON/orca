@@ -6,8 +6,7 @@ import { request } from 'node:http'
 /** The loopback address and `state` from the sign-in link the server printed. */
 export type AntigravitySignInPending = { redirectUri: string; state: string }
 
-const NOT_THIS_SIGN_IN =
-  "That address isn't the last page of this sign-in. Copy the full address from your browser's address bar and try again."
+const NOT_THIS_SIGN_IN = 'This redirect URL does not belong to the current sign-in.'
 
 /** The pasted address only when it is Google's answer to this flow's link; otherwise a sentence
  *  the person reads, since nothing else may be sent to a port on this host. */
@@ -16,31 +15,37 @@ export function antigravitySignInCallback(
   callbackUrl: string
 ): URL {
   const text = callbackUrl.trim()
-  if (text.length > 16_384 || !URL.canParse(text)) {
-    throw new Error(NOT_THIS_SIGN_IN)
+  if (text.length > 16_384) {
+    throw new Error('The sign-in response URL is too long.')
+  }
+  if (!URL.canParse(text)) {
+    throw new Error('Paste the complete redirect URL from the Google sign-in page.')
   }
   const callback = new URL(text)
   const expected = new URL(pending.redirectUri)
   const all = (name: string): string[] => callback.searchParams.getAll(name)
   const [codes, errors, issuers] = [all('code'), all('error'), all('iss')]
+  if (
+    callback.protocol !== 'http:' ||
+    callback.hostname !== '127.0.0.1' ||
+    callback.origin !== expected.origin ||
+    callback.pathname !== expected.pathname ||
+    callback.username !== '' ||
+    callback.password !== '' ||
+    callback.hash !== '' ||
+    all('state').length !== 1 ||
+    callback.searchParams.get('state') !== pending.state
+  ) {
+    throw new Error(NOT_THIS_SIGN_IN)
+  }
   const oneAnswer =
     (codes.length === 1 && codes[0] !== '' && errors.length === 0) ||
     (errors.length === 1 && errors[0] !== '' && codes.length === 0)
-  const valid =
-    callback.protocol === 'http:' &&
-    callback.hostname === '127.0.0.1' &&
-    callback.origin === expected.origin &&
-    callback.pathname === expected.pathname &&
-    !callback.username &&
-    !callback.password &&
-    !callback.hash &&
-    all('state').length === 1 &&
-    callback.searchParams.get('state') === pending.state &&
-    oneAnswer &&
-    (issuers.length === 0 ||
-      (issuers.length === 1 && issuers[0] === 'https://accounts.google.com'))
-  if (!valid) {
-    throw new Error(NOT_THIS_SIGN_IN)
+  if (!oneAnswer) {
+    throw new Error('The redirect URL must contain one Google sign-in response.')
+  }
+  if (issuers.some((issuer) => issuer !== 'https://accounts.google.com') || issuers.length > 1) {
+    throw new Error('The redirect URL is not a Google sign-in response.')
   }
   return callback
 }
