@@ -19213,7 +19213,6 @@
       "heroBodyNoSize": "一次性下载。它会保存在这台电脑上，并由所有 {{agent}} 聊天共用。",
       "stripSize": "下载 {{size}} MB，保存在这台电脑上",
       "downloadSize": "下载 {{size}} MB",
-      "settingsHint": "也可在 设置 › 聊天 › 供应商 中安装",
       "installShort": "安装",
       "tryAgain": "重试",
       "cancelShort": "取消",

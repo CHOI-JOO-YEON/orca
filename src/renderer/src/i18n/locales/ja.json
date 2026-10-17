@@ -19213,7 +19213,6 @@
       "heroBodyNoSize": "一度きりのダウンロードです。このコンピューターに保存され、すべての {{agent}} チャットで共有されます。",
       "stripSize": "{{size}} MB のダウンロード、このコンピューターに保存されます",
       "downloadSize": "{{size}} MB のダウンロード",
-      "settingsHint": "設定 › チャット › プロバイダー からも行えます",
       "installShort": "インストール",
       "tryAgain": "再試行",
       "cancelShort": "キャンセル",

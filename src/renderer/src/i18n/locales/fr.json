@@ -19317,7 +19317,6 @@
       "heroBodyNoSize": "Téléchargement unique. Il est enregistré sur cet ordinateur et partagé par toutes les conversations {{agent}}.",
       "stripSize": "Téléchargement de {{size}} Mo, enregistré sur cet ordinateur",
       "downloadSize": "Téléchargement de {{size}} Mo",
-      "settingsHint": "Aussi dans Paramètres › Chat › Fournisseurs",
       "installShort": "Installer",
       "tryAgain": "Réessayer",
       "cancelShort": "Annuler",

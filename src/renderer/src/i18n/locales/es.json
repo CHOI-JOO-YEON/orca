@@ -19201,7 +19201,6 @@
       "heroBodyNoSize": "Descarga única. Se guarda en este equipo y la comparten todos los chats de {{agent}}.",
       "stripSize": "Descarga de {{size}} MB, guardada en este equipo",
       "downloadSize": "Descarga de {{size}} MB",
-      "settingsHint": "También en Ajustes › Chat › Proveedores",
       "installShort": "Instalar",
       "tryAgain": "Reintentar",
       "cancelShort": "Cancelar",

@@ -19213,7 +19213,6 @@
       "heroBodyNoSize": "한 번만 다운로드합니다. 이 컴퓨터에 저장되며 모든 {{agent}} 채팅이 함께 사용합니다.",
       "stripSize": "{{size}}MB 다운로드, 이 컴퓨터에 저장됨",
       "downloadSize": "{{size}}MB 다운로드",
-      "settingsHint": "설정 › 채팅 › 공급자에서도 설치할 수 있습니다",
       "installShort": "설치",
       "tryAgain": "다시 시도",
       "cancelShort": "취소",
