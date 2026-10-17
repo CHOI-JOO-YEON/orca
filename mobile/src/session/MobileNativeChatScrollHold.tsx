@@ -160,9 +160,13 @@ export class MobileNativeChatScrollHold extends Component<Props> {
     }
     const list = this.props.listRef.current
     const scroller = list?.getScrollableNode()
-    const held = scroller && !overscrolled(scroller) ? placeOnScreen(scroller, previous.rowKeys) : null
+    const held =
+      scroller && !overscrolled(scroller) ? placeOnScreen(scroller, previous.rowKeys) : null
     const regrouped = previous.layoutKey !== this.props.layoutKey
-    if (!held || (!scrollWritesStopMomentum() && !regrouped && !moves(held[0], this.props.rowKeys))) {
+    if (
+      !held ||
+      (!scrollWritesStopMomentum() && !regrouped && !moves(held[0], this.props.rowKeys))
+    ) {
       return null
     }
     list?.holdPlace?.(true)

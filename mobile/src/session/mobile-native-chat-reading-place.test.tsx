@@ -20,7 +20,8 @@ const platform = vi.hoisted(() => ({ OS: 'web' }))
 // The page's own hold, as on iOS: where the browser has scroll anchoring it keeps these places
 // itself, and the hold runs only for a regroup or a move to another row.
 vi.stubGlobal('navigator', {
-  userAgent: 'Mozilla/5.0 (iPhone) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/604.1'
+  userAgent:
+    'Mozilla/5.0 (iPhone) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/604.1'
 })
 
 vi.mock('react-native', () => ({

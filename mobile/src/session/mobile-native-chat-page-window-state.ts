@@ -10,11 +10,18 @@ export type MobileNativeChatWindowScroller = Measured & {
   clientHeight: number
   clientWidth: number
   style?: { overflowAnchor: string }
-  addEventListener: (type: string, listener: (event: unknown) => void, options: { passive: true }) => void
+  addEventListener: (
+    type: string,
+    listener: (event: unknown) => void,
+    options: { passive: true }
+  ) => void
   removeEventListener: (type: string, listener: (event: unknown) => void) => void
 }
 
-export type MobileNativeChatWindowRowState = (index: number, row: NativeChatMessage) => MobileNativeChatTurnRow
+export type MobileNativeChatWindowRowState = (
+  index: number,
+  row: NativeChatMessage
+) => MobileNativeChatTurnRow
 export type MobileNativeChatWindowGroup = { from: string; fromAt: number; to: string; toAt: number }
 
 /** Where the window stands, by key, so landings and trims never change which rows are drawn. */

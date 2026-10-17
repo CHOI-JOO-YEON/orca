@@ -103,7 +103,12 @@ export class MobileNativeChatPageMotion {
     }
     // The scrollbar, which is the scroller's own; a press on a row inside is no scroll.
     const point = (event: unknown) => {
-      if (typeof event === 'object' && event !== null && 'target' in event && event.target === scroller) {
+      if (
+        typeof event === 'object' &&
+        event !== null &&
+        'target' in event &&
+        event.target === scroller
+      ) {
         this.pointing = true
         this.way = 0
       }
