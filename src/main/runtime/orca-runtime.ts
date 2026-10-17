@@ -1,7 +1,7 @@
 import type { RuntimeLinearCommandSurface } from './runtime-linear-command-surface'
 import { installRuntimeLinearCommandSurface } from './runtime-linear-command-surface'
 import { publishWorkspaceViewChanges } from './runtime-workspace-view-change-events'
-import { OrcaRuntimeWithMigrationCatalog } from './orca-runtime-migration-catalog'
+import { OrcaRuntimeWithWorkspaceActivityFacts } from './sidebar-inputs/orca-runtime-workspace-activity-facts'
 import type { RuntimeCommandSurfaceHost } from './orca-runtime-core'
 import type {
   AgentLaunchTabPublished,
@@ -36,9 +36,10 @@ import {
   type StructuredAgentAvailability,
   type StructuredAgentAvailabilityReader
 } from './structured-agent-availability'
+import { resolveHostStructuredAgentCreateSupport } from './structured-agent-launch-support'
 
 // oxlint-disable-next-line typescript/no-unsafe-declaration-merging -- SAFETY: The existing Linear installer supplies the canonical prototype surface.
-class OrcaRuntimeService extends OrcaRuntimeWithMigrationCatalog {
+class OrcaRuntimeService extends OrcaRuntimeWithWorkspaceActivityFacts {
   private async selectReferenceCatalogWorkspace(selector: string, cwd?: string) {
     const catalog = listReferenceWorkspaces(
       this.requireStore(),
@@ -92,7 +93,7 @@ class OrcaRuntimeService extends OrcaRuntimeWithMigrationCatalog {
     })
   }
 
-  constructor(...args: ConstructorParameters<typeof OrcaRuntimeWithMigrationCatalog>) {
+  constructor(...args: ConstructorParameters<typeof OrcaRuntimeWithWorkspaceActivityFacts>) {
     super(...args)
     // Why: the runtime listing re-runs a scan the worktree-change generation overtook and re-lists
     // through this runtime's scan cache, so a worktree change must reach both. The desktop IPC
@@ -112,8 +113,14 @@ class OrcaRuntimeService extends OrcaRuntimeWithMigrationCatalog {
   ): () => void {
     this.structuredAgentAvailability ??= installStructuredAgentAvailability(
       this.store,
-      (worktree, agent) =>
-        this.getStructuredAgentSessionCreateSupport(worktree, agent, { refreshShellOnMiss: false })
+      async (worktree, agent) =>
+        resolveHostStructuredAgentCreateSupport({
+          agent,
+          worktreeSelector: worktree,
+          location: await this.resolveStructuredAgentSessionLocation(worktree),
+          runtime: this,
+          refreshShellOnMiss: false
+        })
     )
     return this.structuredAgentAvailability.subscribe(worktreeSelector, read)
   }
@@ -201,9 +208,6 @@ class OrcaRuntimeService extends OrcaRuntimeWithMigrationCatalog {
 
   /** A window's layout command (`layout.apply`), applied to the partitions that hold its tab. */
   async applyLayoutCommand(command: WindowLayoutCommand): Promise<LayoutApplyReply> {
-    if (command.type === 'splitPane' && command.newLeafId) {
-      this.noteWindowMountedSplit(command.newLeafId)
-    }
     const reply = await applyWindowLayoutCommand(
       this.requireStore(),
       (worktreeId, tabId) => {

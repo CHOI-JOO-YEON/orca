@@ -32,6 +32,9 @@ export const STRUCTURED_AGENT_SESSION_RESUME_HISTORY_RUNTIME_CAPABILITY =
 export const AGENT_SESSION_MODEL_CATALOG_SAVED_ONLY_RUNTIME_CAPABILITY =
   'agent-session.model-catalog.saved-only.v1' as const
 
+/** Strict create source identity is sent only after host negotiation. */
+export const STRUCTURED_AGENT_SESSION_CLI_SOURCE_RUNTIME_CAPABILITY =
+  'agent-session.structured.cli-source.v1' as const
 // Why: `agentSession.subscribeAvailability` is a new stream with strict params; a decoder drops an
 // unknown opcode silently, so a client subscribes only to a host advertising this and otherwise
 // keeps asking createSupport per agent.
@@ -44,6 +47,7 @@ export const STRUCTURED_AGENT_SESSION_SURFACE_RUNTIME_CAPABILITIES = [
   STRUCTURED_AGENT_SESSION_REGISTERED_AGENTS_RUNTIME_CAPABILITY,
   PI_STRUCTURED_DIALOGS_RUNTIME_CAPABILITY,
   STRUCTURED_AGENT_SESSION_RESUME_HISTORY_RUNTIME_CAPABILITY,
+  STRUCTURED_AGENT_SESSION_CLI_SOURCE_RUNTIME_CAPABILITY,
   AGENT_SESSION_MODEL_CATALOG_SAVED_ONLY_RUNTIME_CAPABILITY,
   STRUCTURED_AGENT_SESSION_AVAILABILITY_RUNTIME_CAPABILITY
 ] as const

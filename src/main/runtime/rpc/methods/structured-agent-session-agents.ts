@@ -35,7 +35,8 @@ export const STRUCTURED_AGENT_SESSION_AGENTS_METHODS = [
           clientReadsStructuredSessionAgent(ctx, definition.agent)
         ).map(({ definition }) => ({
           agent: definition.agent,
-          capabilities: { ...definition.capabilities }
+          capabilities: { ...definition.capabilities },
+          ...(definition.managedRuntime?.() ? { managedRuntime: true as const } : {})
         }))
       }
     }
