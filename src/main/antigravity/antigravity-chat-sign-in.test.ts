@@ -5,20 +5,25 @@ import { mkdir, mkdtemp, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { PassThrough } from 'node:stream'
+import { runProcess } from '@orca/process-host'
 import { afterEach, expect, it, vi } from 'vitest'
 import { createFakePipedChild } from '../../shared/__fixtures__/fake-spawned-child'
 import type { terminateProviderProcessTree } from '../provider-process/provider-process-teardown'
 import { createAcpAgentConnection, type AcpAgentConnection } from '../acp/acp-agent-connection'
-import { ANTIGRAVITY_LAUNCH_SPEC, ANTIGRAVITY_SIGN_IN_PROMPT } from '../acp/acp-launch-specs'
+import { ANTIGRAVITY_LAUNCH_SPEC } from '../acp/acp-launch-specs'
 import { prepareAcpStructuredLaunch } from '../acp/acp-structured-launch-preparation'
 import type { ConnectAcpAgent } from '../acp/acp-structured-connection'
 import { AcpScriptedAgent, deferred } from '../acp/acp-scripted-agent.test-support'
 import type { RpcContext } from '../runtime/rpc/core'
+import type { RpcCallerIdentity } from '../runtime/rpc/rpc-caller-identity'
 import { ANTIGRAVITY_ACCOUNT_METHODS } from '../runtime/rpc/methods/antigravity-accounts'
 import type { AntigravityChatSignInStatus } from '../../shared/antigravity-account-types'
+import { ANTIGRAVITY_BROWSER, ANTIGRAVITY_SIGN_IN_PROMPT } from './antigravity-browser-helper'
 import {
   antigravitySignInUrl,
+  cancelAntigravityChatSignIn,
   completeAntigravityChatSignIn,
+  readAntigravityChatSignInStatus,
   startAntigravityChatSignIn
 } from './antigravity-chat-sign-in'
 
@@ -38,26 +43,17 @@ const PIN = {
   archiveBytes: 1,
   members: []
 }
+const DESKTOP = 'trusted-local:desktop'
+const PHONE: RpcCallerIdentity = { kind: 'paired-device', deviceId: 'phone' }
 const folders: string[] = []
-const NO_SIGN_IN = { variable: 'GEMINI_HOME', path: join(tmpdir(), 'orca-agy-no-sign-in') }
 afterEach(async () => {
   vi.restoreAllMocks()
   await Promise.all(folders.splice(0).map((path) => rm(path, { recursive: true, force: true })))
 })
 
-/** A sign-in on a scratch data folder whose server prints `link` when asked to authenticate. */
-async function signInAgainst(link: string, configure?: (connection: AcpAgentConnection) => void) {
-  vi.spyOn(ANTIGRAVITY_LAUNCH_SPEC.managedRuntime, 'pin').mockReturnValue(PIN)
-  const stateDirectory = await mkdtemp(join(tmpdir(), 'orca-agy-sign-in-'))
-  folders.push(stateDirectory)
-  const agent = new AcpScriptedAgent()
-  const stderr = new PassThrough()
-  const browserDone = deferred<void>()
+/** A scripted server process whose stdin closing is its exit. */
+function fakeServer(agent: AcpScriptedAgent, stderr = new PassThrough()) {
   agent.on('initialize', (frame) => agent.reply(frame, { protocolVersion: 1 }))
-  agent.on('authenticate', (frame) => {
-    stderr.write(`${ANTIGRAVITY_SIGN_IN_PROMPT} ${link}\n`)
-    void browserDone.promise.then(() => agent.reply(frame, {}))
-  })
   const child = Object.assign(createFakePipedChild(), {
     pid: 9_999_998,
     stdout: agent.stdout,
@@ -66,6 +62,38 @@ async function signInAgainst(link: string, configure?: (connection: AcpAgentConn
     kill: vi.fn(() => true)
   })
   child.stdin.once('finish', () => child.emit('exit', 0, null))
+  return child
+}
+
+/** What the server's browser call prints: the real helper, run as the server runs it. */
+async function helperOutput(link: string): Promise<string> {
+  const [program = '', ...args] = (ANTIGRAVITY_BROWSER.argv ?? []).map((arg) =>
+    arg === '%s' ? link : arg
+  )
+  const env = { ...process.env, ...ANTIGRAVITY_BROWSER.env }
+  return (await runProcess({ program, args, env })).stderr
+}
+
+/** A sign-in on a scratch data folder whose server prints `output` when asked to authenticate;
+ *  the browser finishing and the verifying session's answer are each the test's to release. */
+async function signInAgainst(
+  output: () => Promise<string>,
+  configure?: (connection: AcpAgentConnection) => void
+) {
+  vi.spyOn(ANTIGRAVITY_LAUNCH_SPEC.managedRuntime, 'pin').mockReturnValue(PIN)
+  const stateDirectory = await mkdtemp(join(tmpdir(), 'orca-agy-sign-in-'))
+  folders.push(stateDirectory)
+  const agent = new AcpScriptedAgent()
+  const stderr = new PassThrough()
+  const [browserDone, sessionOpen] = [deferred<void>(), deferred<void>()]
+  agent.on('authenticate', (frame) => {
+    void output().then((text) => stderr.write(text))
+    void browserDone.promise.then(() => agent.reply(frame, {}))
+  })
+  agent.on('session/new', (frame) => {
+    void sessionOpen.promise.then(() => agent.reply(frame, { sessionId: 'verify' }))
+  })
+  const child = fakeServer(agent, stderr)
   const folder = join(stateDirectory, 'antigravity-chat')
   // A server on PATH, so nothing is downloaded; the chat server ignores the Command setting.
   const bin = join(stateDirectory, 'bin')
@@ -85,20 +113,32 @@ async function signInAgainst(link: string, configure?: (connection: AcpAgentConn
       return connection
     })
   }
-  const { flowId } = startAntigravityChatSignIn(host)
-  return { agent, folder, flowId, host, child, finishBrowser: () => browserDone.resolve() }
+  const { flowId } = startAntigravityChatSignIn(host, DESKTOP)
+  return {
+    agent,
+    folder,
+    flowId,
+    host,
+    child,
+    finishBrowser: () => browserDone.resolve(),
+    openSession: () => sessionOpen.resolve()
+  }
 }
+const printed = (link: string) => async () => `${ANTIGRAVITY_SIGN_IN_PROMPT} ${link}\n`
 
 const subscribe = ANTIGRAVITY_ACCOUNT_METHODS[5]
 
 /** Follows the host's sign-in over its subscription, as a client does, until `close`. */
-async function follow(onFrame: (status: AntigravityChatSignInStatus) => void) {
+async function follow(
+  onFrame: (status: AntigravityChatSignInStatus) => void,
+  caller: RpcCallerIdentity = { kind: 'desktop' }
+) {
   const transport = new AbortController()
-  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the handler reads only the account home and the stream registry.
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the handler reads only the caller and the stream registry.
   const ctx = {
+    caller,
     signal: transport.signal,
     runtime: {
-      resolveStructuredAgentAccountHome: async () => NO_SIGN_IN,
       registerOwnedSubscriptionCleanup: (_id: string, cleanup: () => void) => ({
         releaseIfCurrent: cleanup
       })
@@ -120,12 +160,16 @@ async function stateAfter(flowId: string, phase: string) {
   return left.promise.finally(close)
 }
 
-it('shows the server link, then reads signed in once the browser finishes', async () => {
-  const { agent, folder, flowId, finishBrowser } = await signInAgainst(GOOGLE_LINK)
+it("shows the browser helper's link, and reads signed in only once a session starts", async () => {
+  const { agent, folder, flowId, finishBrowser, openSession } = await signInAgainst(() =>
+    helperOutput(GOOGLE_LINK)
+  )
   const frames: AntigravityChatSignInStatus[] = []
   const watcher = await follow((frame) => frames.push(frame))
-  // A full snapshot on subscribe, before any change.
-  expect(frames).toEqual([{ revision: expect.any(Number), saved: false, flow: expect.anything() }])
+  // A full snapshot on subscribe, before any change; nothing has answered on this host yet.
+  expect(frames).toEqual([
+    { revision: expect.any(Number), auth: 'unknown', flow: expect.anything() }
+  ])
   expect(await stateAfter(flowId, 'starting')).toEqual({
     flowId,
     phase: 'waiting',
@@ -138,26 +182,85 @@ it('shows the server link, then reads signed in once the browser finishes', asyn
     expect(process.platform === 'win32' || ((await stat(path)).mode & 0o777) === 0o700).toBe(true)
   }
   finishBrowser()
-  expect(await stateAfter(flowId, 'waiting')).toEqual({
-    flowId,
-    phase: 'signedIn'
-  })
+  expect(await stateAfter(flowId, 'waiting')).toEqual({ flowId, phase: 'verifying' })
+  expect(readAntigravityChatSignInStatus(DESKTOP).auth).toBe('unknown')
+  openSession()
+  expect(await stateAfter(flowId, 'verifying')).toEqual({ flowId, phase: 'signedIn' })
+  expect(readAntigravityChatSignInStatus(DESKTOP).auth).toBe('signedIn')
   // Then one frame per newer revision, and none once the transport closes.
   await vi.waitFor(() => expect(frames.at(-1)?.flow).toEqual({ flowId, phase: 'signedIn' }))
   const revisions = frames.map(({ revision }) => revision)
   expect(revisions).toEqual([...new Set(revisions)].sort((a, b) => a - b))
   watcher.close()
   const seen = frames.length
-  const next = startAntigravityChatSignIn({
-    launchSources: () => Promise.reject(new Error('raw host detail')),
-    stopLiveChats: async () => {}
-  })
+  const next = startAntigravityChatSignIn(
+    {
+      launchSources: () => Promise.reject(new Error('raw host detail')),
+      stopLiveChats: async () => {}
+    },
+    DESKTOP
+  )
   // The person reads a plain sentence; the raw error goes only to the log.
   expect(await stateAfter(next.flowId, 'starting')).toMatchObject({
     phase: 'failed',
     error: 'Google sign-in for Antigravity failed. Start sign-in again.'
   })
   expect(frames).toHaveLength(seen)
+})
+
+it('shows another client the sign-in without its link, and refuses it every action', async () => {
+  const { flowId, host } = await signInAgainst(printed(GOOGLE_LINK))
+  expect(await stateAfter(flowId, 'starting')).toMatchObject({ phase: 'waiting' })
+  const phone: AntigravityChatSignInStatus[] = []
+  const watcher = await follow((frame) => phone.push(frame), PHONE)
+  expect(phone.at(-1)?.flow).toEqual({ flowId: null, phase: 'waiting' })
+  expect(() => startAntigravityChatSignIn(host, 'phone')).toThrow('in progress in another client')
+  await expect(cancelAntigravityChatSignIn('phone', flowId)).rejects.toThrow('no longer active')
+  const pasted = 'http://127.0.0.1:41234/?state=s1&code=c1'
+  await expect(completeAntigravityChatSignIn('phone', flowId, pasted)).rejects.toThrow('no longer')
+  // Its starter gets the running flow back, and only its starter may cancel it.
+  expect(startAntigravityChatSignIn(host, DESKTOP)).toEqual({ flowId })
+  expect((await cancelAntigravityChatSignIn(DESKTOP, flowId))?.phase).toBe('cancelled')
+  expect(phone.at(-1)?.flow).toEqual({ flowId: null, phase: 'cancelled' })
+  watcher.close()
+})
+
+it('refuses a second, different sign-in link from the server', async () => {
+  const other = GOOGLE_LINK.replace('state=s1', 'state=s2')
+  // The printed line and the helper carry the same link; a different one is a second request.
+  const { flowId } = await signInAgainst(async () =>
+    [GOOGLE_LINK, GOOGLE_LINK, other]
+      .map((link) => `${ANTIGRAVITY_SIGN_IN_PROMPT} ${link}\n`)
+      .join('')
+  )
+  await vi.waitFor(() =>
+    expect(readAntigravityChatSignInStatus(DESKTOP).flow).toEqual({
+      flowId,
+      phase: 'failed',
+      error: 'Antigravity started more than one Google sign-in request.'
+    })
+  )
+})
+
+it("follows a chat's answers: signed out when it asks to sign in, signed in when a session starts", async () => {
+  const chat = (agent: AcpScriptedAgent) =>
+    createAcpAgentConnection(
+      { command: 'agy', args: [], cwd: tmpdir() },
+      { signIn: ANTIGRAVITY_LAUNCH_SPEC.signIn },
+      () => fakeServer(agent)
+    )
+  const asking = new AcpScriptedAgent()
+  const signedOut = chat(asking)
+  // On standard output too, where the protocol itself drops the line.
+  asking.stdout.write(`${ANTIGRAVITY_SIGN_IN_PROMPT} ${GOOGLE_LINK}\n`)
+  await vi.waitFor(() => expect(readAntigravityChatSignInStatus(DESKTOP).auth).toBe('signedOut'))
+  expect(signedOut.closed).toBe(true)
+  const working = new AcpScriptedAgent()
+  working.on('session/new', (frame) => working.reply(frame, { sessionId: 'chat' }))
+  const signedIn = chat(working)
+  await signedIn.start({ cwd: tmpdir(), mcpServers: [] })
+  expect(readAntigravityChatSignInStatus(DESKTOP).auth).toBe('signedIn')
+  await signedIn.close()
 })
 
 it('signs in from the address a browser on another computer ended on', async () => {
@@ -174,14 +277,17 @@ it('signs in from the address a browser on another computer ended on', async () 
   const port = typeof address === 'object' ? address?.port : undefined
   try {
     const link = GOOGLE_LINK.replace('41234', String(port))
-    const { flowId, finishBrowser } = await signInAgainst(link)
+    const { flowId, finishBrowser, openSession } = await signInAgainst(printed(link))
     finish = finishBrowser
     expect(await stateAfter(flowId, 'starting')).toMatchObject({ phase: 'waiting' })
     const pasted = `http://127.0.0.1:${port}/?state=s1&code=c1`
-    await completeAntigravityChatSignIn(flowId, pasted)
+    await completeAntigravityChatSignIn(DESKTOP, flowId, pasted)
     expect(await received.promise).toBe('/?state=s1&code=c1')
+    await expect(completeAntigravityChatSignIn(DESKTOP, flowId, pasted)).rejects.toThrow(
+      'already sent'
+    )
+    openSession()
     expect(await stateAfter(flowId, 'verifying')).toEqual({ flowId, phase: 'signedIn' })
-    await expect(completeAntigravityChatSignIn(flowId, pasted)).rejects.toThrow('already sent')
   } finally {
     listener.close()
   }
@@ -189,7 +295,7 @@ it('signs in from the address a browser on another computer ended on', async () 
 
 it('never shows a link that is not a Google sign-in back to this host', async () => {
   const foreign = GOOGLE_LINK.replace('accounts.google.com', 'accounts.example.com')
-  const { flowId } = await signInAgainst(foreign)
+  const { flowId } = await signInAgainst(printed(foreign))
   const state = await stateAfter(flowId, 'starting')
   expect(state).toMatchObject({ flowId, phase: 'failed' })
   expect(JSON.stringify(state)).not.toContain('example')
@@ -204,12 +310,15 @@ it('never shows a link that is not a Google sign-in back to this host', async ()
 
 it('retains an unclosed sign-in child for both launch entry points until its exit is proven', async () => {
   const close = vi.fn(async () => false)
-  const old = await signInAgainst(GOOGLE_LINK, (connection) => {
+  const old = await signInAgainst(printed(GOOGLE_LINK), (connection) => {
     vi.spyOn(connection, 'close').mockImplementation(close)
   })
   await stateAfter(old.flowId, 'starting')
   old.finishBrowser()
-  expect((await stateAfter(old.flowId, 'waiting'))?.phase).toBe('failed')
+  old.openSession()
+  await vi.waitFor(() =>
+    expect(readAntigravityChatSignInStatus(DESKTOP).flow).toMatchObject({ phase: 'failed' })
+  )
   const launch = old.host.connect.mock.calls[0][0]
   const { env, cwd, envToDelete } = launch
   if (!env || !cwd || !envToDelete) {
@@ -217,7 +326,7 @@ it('retains an unclosed sign-in child for both launch entry points until its exi
   }
   expect((await stat(env.TMPDIR)).isDirectory()).toBe(true)
   expect((await stat(cwd)).isDirectory()).toBe(true)
-  const next = startAntigravityChatSignIn(old.host)
+  const next = startAntigravityChatSignIn(old.host, DESKTOP)
   expect((await stateAfter(next.flowId, 'starting'))?.phase).toBe('failed')
   expect(old.host.connect).toHaveBeenCalledTimes(1)
   const prepareChat = async () =>
@@ -271,16 +380,19 @@ it('fails without downloading anything while the server is not installed', async
   const dataDirectory = await mkdtemp(join(tmpdir(), 'orca-agy-sign-in-'))
   folders.push(dataDirectory)
   const connect = vi.fn<ConnectAcpAgent<AcpAgentConnection>>()
-  const { flowId } = startAntigravityChatSignIn({
-    launchSources: async () => ({
-      accountHome: { variable: 'GEMINI_HOME', path: join(dataDirectory, 'antigravity-chat') },
-      env: { PATH: join(dataDirectory, 'empty-bin') },
-      commandSettings: {},
-      dataDirectory
-    }),
-    stopLiveChats: async () => {},
-    connect
-  })
+  const { flowId } = startAntigravityChatSignIn(
+    {
+      launchSources: async () => ({
+        accountHome: { variable: 'GEMINI_HOME', path: join(dataDirectory, 'antigravity-chat') },
+        env: { PATH: join(dataDirectory, 'empty-bin') },
+        commandSettings: {},
+        dataDirectory
+      }),
+      stopLiveChats: async () => {},
+      connect
+    },
+    DESKTOP
+  )
   const state = await stateAfter(flowId, 'starting')
   expect(state).toMatchObject({ phase: 'failed', error: expect.stringContaining('not installed') })
   expect(connect).not.toHaveBeenCalled()

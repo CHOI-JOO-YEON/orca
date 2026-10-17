@@ -9,6 +9,20 @@ import type { ProviderProcessLaunch } from '../provider-process/provider-process
 import { AcpAuthRequiredError, AcpConnectionClosedError } from './acp-errors'
 import { resolveAcpPeerOptions, type AcpPeerOptions } from './acp-peer-limits'
 import { AcpSessionRuntime, type AcpSessionRuntimeOptions } from './acp-session-runtime'
+import type { AcpSessionStarted, AcpSessionStartOptions } from './acp-session-setup'
+
+/** How an agent that signs in through a browser says so on its output. */
+export type AcpSignInWatch = {
+  /** A line where the agent waits for browser sign-in: ends the connection signed out. */
+  prompt(line: string): boolean
+  /** The agent's answer on its sign-in: a session started, or it asked to sign in. */
+  answered?(signedIn: boolean): void
+  /** Receives a prompt line instead, and the connection stays open for the sign-in to finish. */
+  link?(line: string): void
+}
+
+// Long enough to classify a sign-in line on standard output, whose protocol lines can be huge.
+const STDOUT_SIGN_IN_LINE_MAX_CHARS = 32_768
 
 export type AcpAgentConnectionOptions = Omit<AcpSessionRuntimeOptions, 'peer'> & {
   peer?: Omit<AcpPeerOptions, 'closeOnInputEnd'>
@@ -16,10 +30,7 @@ export type AcpAgentConnectionOptions = Omit<AcpSessionRuntimeOptions, 'peer'> &
   onExit?: (error: Error, context: { expected: boolean; exit: ProviderProcessExit }) => void
   /** Any stdout or stderr chunk from the child. */
   onOutput?: () => void
-  /** A stderr line where the agent waits for browser sign-in: ends the connection signed out. */
-  signInPrompt?: (line: string) => boolean
-  /** Receives that line instead, and the connection stays open for the sign-in to finish. */
-  signInLink?: (line: string) => void
+  signIn?: AcpSignInWatch
 }
 
 /** The execution host owns the child and protocol lifetime; the adapter owns turns and Stop. */
@@ -35,6 +46,7 @@ export class AcpAgentConnection extends AcpSessionRuntime {
   private readonly managed: ManagedProviderProcess
   private readonly lifecycle: { closing: boolean; error?: Error }
   private readonly diagnoseLifecycle: (message: string) => void
+  private readonly signIn: AcpSignInWatch | undefined
   readonly spawned: Promise<void>
 
   constructor(
@@ -44,25 +56,22 @@ export class AcpAgentConnection extends AcpSessionRuntime {
   ) {
     // Validate before spawning so invalid limits cannot leave an unowned child.
     const peer = resolveAcpPeerOptions({ ...options.peer, closeOnInputEnd: false })
-    const { signInPrompt, signInLink } = options
+    const { signIn } = options
     let signedOut = (): void => {}
+    const signInLine = (line: string): boolean => {
+      const prompted = signIn?.prompt(line) === true
+      if (prompted && signIn?.link) {
+        signIn.link(line)
+      } else if (prompted) {
+        signedOut()
+      }
+      return prompted
+    }
     const managed = spawnManagedProviderProcess(launch, {
       spawnImpl,
       site: 'acp-agent-teardown',
       ...(options.onOutput ? { onOutput: options.onOutput } : {}),
-      ...(signInPrompt
-        ? {
-            onStderrLine: (line: string) => {
-              const prompted = signInPrompt(line)
-              if (prompted && signInLink) {
-                signInLink(line)
-              } else if (prompted) {
-                signedOut()
-              }
-              return prompted
-            }
-          }
-        : {})
+      ...(signIn ? { onStderrLine: signInLine } : {})
     })
     const lifecycle: { closing: boolean; error?: Error } = { closing: false }
     const diagnose = (message: string): void => {
@@ -94,7 +103,17 @@ export class AcpAgentConnection extends AcpSessionRuntime {
     this.managed = managed
     this.lifecycle = lifecycle
     this.diagnoseLifecycle = diagnose
+    this.signIn = signIn
     const { child } = managed
+    if (signIn) {
+      // The agent may print its sign-in line on standard output too, where the protocol drops it.
+      let partial = ''
+      child.stdout.on('data', (chunk: string | Buffer) => {
+        const lines = `${partial}${String(chunk)}`.split('\n')
+        partial = (lines.pop() ?? '').slice(0, STDOUT_SIGN_IN_LINE_MAX_CHARS)
+        lines.forEach(signInLine)
+      })
+    }
     this.spawned = new Promise((resolve) => {
       if (child.pid !== undefined) {
         resolve()
@@ -109,8 +128,10 @@ export class AcpAgentConnection extends AcpSessionRuntime {
       child.once('error', done)
     })
     child.on('error', (error) => super.close(error))
-    signedOut = () =>
+    signedOut = () => {
+      signIn?.answered?.(false)
       super.close(new AcpAuthRequiredError('The agent asked to sign in in a browser'))
+    }
     child.stderr.on('error', (error) => super.close(error))
     managed.onExit((exit) => {
       const error =
@@ -123,6 +144,21 @@ export class AcpAgentConnection extends AcpSessionRuntime {
         diagnose(`ACP exit listener failed: ${String(failure)}`)
       }
     })
+  }
+
+  override start(options: AcpSessionStartOptions): Promise<AcpSessionStarted> {
+    return super.start(options).then(
+      (started) => {
+        this.signIn?.answered?.(true)
+        return started
+      },
+      (error: unknown) => {
+        if (error instanceof AcpAuthRequiredError) {
+          this.signIn?.answered?.(false)
+        }
+        throw error
+      }
+    )
   }
 
   get pid(): number | undefined {

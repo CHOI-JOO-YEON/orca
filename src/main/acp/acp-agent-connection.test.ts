@@ -140,7 +140,7 @@ describe('ACP process-owning connection', () => {
     const { connection, child } = fixture({
       onExit,
       onDiagnostic: (message) => said.push(message),
-      signInPrompt: (line) => line.startsWith('Open the following link to authenticate')
+      signIn: { prompt: (line) => line.startsWith('Open the following link to authenticate') }
     })
     await connection.start(start)
     const turn = connection.prompt([...prompt]).catch((error: unknown) => error)
@@ -157,7 +157,9 @@ describe('ACP process-owning connection', () => {
   })
 
   it('drops an overlong stderr line it could not classify instead of keeping its prefix', async () => {
-    const { connection, child } = fixture({ signInPrompt: (line) => line.endsWith('authenticate') })
+    const { connection, child } = fixture({
+      signIn: { prompt: (line) => line.endsWith('authenticate') }
+    })
     await connection.start(start)
     const link = `https://accounts.example/auth?state=${'x'.repeat(9000)}`
     child.stderr.write(`warming up\nplease visit ${link}`)

@@ -1,4 +1,5 @@
-import { defineMethod, defineStreamingMethod } from '../core'
+import { defineMethod, defineStreamingMethod, type RpcContext } from '../core'
+import { rpcCallerOperationKey } from '../rpc-caller-identity'
 import type { OrcaRuntimeService } from '../../orca-runtime'
 import {
   AntigravityAccountMutationParams,
@@ -40,6 +41,14 @@ const chatSignInHost = (runtime: OrcaRuntimeService) => ({
   stopLiveChats: stopLiveAntigravityChats
 })
 
+/** The caller a sign-in belongs to, as its transport proved it; one it can't name gets none. */
+function signInOwner({ caller }: Pick<RpcContext, 'caller'>): string {
+  if (!caller) {
+    throw new Error('This client cannot sign Antigravity in.')
+  }
+  return rpcCallerOperationKey(caller)
+}
+
 export const ANTIGRAVITY_ACCOUNT_METHODS = [
   defineMethod({
     name: 'accounts.antigravityList',
@@ -72,7 +81,8 @@ export const ANTIGRAVITY_ACCOUNT_METHODS = [
     name: 'accounts.antigravityChatSignInStart',
     permission: 'accounts-admin',
     params: null,
-    handler: async (_, { runtime }) => startAntigravityChatSignIn(chatSignInHost(runtime))
+    handler: async (_, ctx) =>
+      startAntigravityChatSignIn(chatSignInHost(ctx.runtime), signInOwner(ctx))
   }),
   // A full snapshot on subscribe, then one per revision, until the transport closes.
   defineStreamingMethod({
@@ -80,9 +90,8 @@ export const ANTIGRAVITY_ACCOUNT_METHODS = [
     permission: 'accounts-admin',
     params: null,
     handler: async (_, ctx, emit) => {
-      const accountHome = await ctx.runtime.resolveStructuredAgentAccountHome('antigravity')
-      // A failed first read fails the subscribe; a later one keeps the client's last snapshot.
-      let shown = await readAntigravityChatSignInStatus(accountHome)
+      // A caller with no identity owns no flow, so it sees every flow as another client's.
+      const owner = ctx.caller ? rpcCallerOperationKey(ctx.caller) : ''
       const frame = ctx.requestId ? `:${ctx.requestId}` : ''
       const subscriptionId = `antigravityChatSignIn:${ctx.connectionId ?? 'local'}${frame}`
       let dispose = (): void => {}
@@ -90,34 +99,22 @@ export const ANTIGRAVITY_ACCOUNT_METHODS = [
       if (stream.isClosed()) {
         return
       }
-      // Revisions only grow, so a read that ends after a newer one is dropped.
-      const follow = (): void =>
-        void readAntigravityChatSignInStatus(accountHome).then(
-          (next) => {
-            if (next.revision > shown.revision && !stream.isClosed()) {
-              shown = next
-              emit(next)
-            }
-          },
-          (error) => console.warn('[antigravity] sign-in status not read for a subscriber:', error)
-        )
-      dispose = subscribeAntigravityChatSignIn(follow)
-      emit(shown)
-      // Catches a revision between the first read and the subscribe.
-      follow()
+      dispose = subscribeAntigravityChatSignIn(() => emit(readAntigravityChatSignInStatus(owner)))
+      emit(readAntigravityChatSignInStatus(owner))
     }
   }),
   defineMethod({
     name: 'accounts.antigravityChatSignInCancel',
     permission: 'accounts-admin',
     params: AntigravityChatSignInFlowParams,
-    handler: async ({ flowId }) => cancelAntigravityChatSignIn(flowId)
+    handler: async ({ flowId }, ctx) => cancelAntigravityChatSignIn(signInOwner(ctx), flowId)
   }),
   // The address a browser on another computer ended on, sent to the listener on this host.
   defineMethod({
     name: 'accounts.antigravityChatSignInComplete',
     permission: 'accounts-admin',
     params: AntigravityChatSignInCompleteParams,
-    handler: async ({ flowId, callbackUrl }) => completeAntigravityChatSignIn(flowId, callbackUrl)
+    handler: async ({ flowId, callbackUrl }, ctx) =>
+      completeAntigravityChatSignIn(signInOwner(ctx), flowId, callbackUrl)
   })
 ] as const
