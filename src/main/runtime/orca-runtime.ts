@@ -37,9 +37,21 @@ import {
   type StructuredAgentAvailabilityReader
 } from './structured-agent-availability'
 import { resolveHostStructuredAgentCreateSupport } from './structured-agent-launch-support'
+import { PairedServerRowsProducer } from './sidebar-inputs/paired-server-rows-producer'
+import { HEADLESS_RUNTIME_WINDOW_ID } from '../../shared/runtime-session-contracts'
+import { getHostDisplayLabelOverrides } from '../../shared/host-setting-overrides'
 
 // oxlint-disable-next-line typescript/no-unsafe-declaration-merging -- SAFETY: The existing Linear installer supplies the canonical prototype surface.
 class OrcaRuntimeService extends OrcaRuntimeWithWorkspaceActivityFacts {
+  // Idle until relay hosts attach. The fallback refresh runs while a window shows the sidebar.
+  readonly pairedServerRows = new PairedServerRowsProducer({
+    hasDemand: () =>
+      this.authoritativeWindowId !== null &&
+      this.authoritativeWindowId !== HEADLESS_RUNTIME_WINDOW_ID &&
+      this.store?.getUI?.().sidebarOpen !== false,
+    hostLabelOverrides: () => getHostDisplayLabelOverrides(this.getClientSettings())
+  })
+
   private async selectReferenceCatalogWorkspace(selector: string, cwd?: string) {
     const catalog = listReferenceWorkspaces(
       this.requireStore(),
