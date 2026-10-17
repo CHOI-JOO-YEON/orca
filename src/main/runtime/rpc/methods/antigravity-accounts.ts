@@ -16,6 +16,7 @@ import {
 } from '../../../antigravity/antigravity-chat-sign-in'
 import { getStructuredAgentSessionHost } from '../../../native-chat/agent-session-wire/structured-agent-session-registry'
 import { bindStructuredAgentSessionStream } from './structured-agent-session-status-stream'
+import { structuredAgentHostLaunchSources } from '../../structured-agent-launch-support'
 
 /** Stops each running Antigravity chat on this host as a worktree teardown stops its chats; the
  *  chat stays, and its next send starts the agent again. */
@@ -35,7 +36,7 @@ async function stopLiveAntigravityChats(): Promise<void> {
 }
 
 const chatSignInHost = (runtime: OrcaRuntimeService) => ({
-  launchSources: () => runtime.resolveStructuredAgentHostLaunchSources('antigravity'),
+  launchSources: () => structuredAgentHostLaunchSources('antigravity', runtime),
   stopLiveChats: stopLiveAntigravityChats
 })
 
