@@ -4,12 +4,24 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { useAppStore } from '@/store'
 import { getDefaultSettings } from '../../../../shared/constants'
 import type { HostCreateSupport } from '@/lib/structured-agent-session-host-admission'
+import type { HostStructuredAgentAvailability } from '@/runtime/host-structured-agent-availability'
 import {
+  STRUCTURED_AGENT_SESSION_AVAILABILITY_RUNTIME_CAPABILITY as AVAILABILITY,
   STRUCTURED_AGENT_SESSION_RUNTIME_CAPABILITY as CHAT,
   STRUCTURED_AGENT_SESSION_CLIENT_LAUNCH_MODE_CAPABILITY as CLIENT,
   STRUCTURED_AGENT_SESSION_REGISTERED_AGENTS_RUNTIME_CAPABILITY as CATALOG
 } from '../../../../shared/protocol-version'
-const mocks = vi.hoisted(() => ({ support: vi.fn() }))
+const mocks = vi.hoisted(() => ({
+  support: vi.fn(),
+  availability: null as HostStructuredAgentAvailability | null,
+  owners: [] as unknown[]
+}))
+vi.mock('@/runtime/use-host-structured-agent-availability', () => ({
+  useHostStructuredAgentAvailability: (owner: unknown) => {
+    mocks.owners.push(owner)
+    return owner ? mocks.availability : null
+  }
+}))
 vi.mock('@/lib/structured-agent-session-host-admission', () => ({
   askHostCreateSupport: mocks.support
 }))
@@ -37,7 +49,7 @@ vi.mock('@/lib/agent-launch-route-input', () => ({
   ) => ({
     agent,
     executionHostId: state.activeWorkspaceExecutionHostId ?? 'local',
-    hostCapabilities: [CHAT, CLIENT, CATALOG],
+    hostCapabilities: [CHAT, CLIENT, CATALOG, ...(mocks.availability ? [AVAILABILITY] : [])],
     clientCapabilities: [CHAT, CLIENT],
     hostStructuredAgents: ['claude', 'codex', 'opencode']
   })
@@ -48,6 +60,8 @@ const pending: { resolve: (answer: HostCreateSupport) => void; signal: AbortSign
 beforeEach(() => {
   vi.useFakeTimers()
   pending.length = 0
+  mocks.availability = null
+  mocks.owners.length = 0
   mocks.support
     .mockReset()
     .mockImplementation(
@@ -111,6 +125,8 @@ it.each(['local', 'runtime:server'] as const)(
     expect(pending[9]?.signal.aborted).toBe(true)
     expect(claude()).toMatchObject({ kind: 'chat' })
     expect(mocks.support).toHaveBeenCalledTimes(12)
+    // A host without the availability capability is never subscribed to.
+    expect(mocks.owners.every((owner) => owner === null)).toBe(true)
   }
 )
 
@@ -127,4 +143,21 @@ it('keeps a supported chat clickable when the host cannot answer', async () => {
   expect(hook.result.current.rows.find((row) => row.agent === 'claude')).toMatchObject({
     kind: 'chat'
   })
+})
+
+it('reads a publishing host from its one complete answer and never asks per agent', () => {
+  mocks.availability = { ready: false }
+  const hook = renderHook(() => useNewTabAgentMenuRows('four', true, { kind: 'local' }))
+  const claude = () => hook.result.current.rows.find((row) => row.agent === 'claude')
+  expect(claude()).toMatchObject({ kind: 'chat-unavailable', reason: 'pending' })
+  mocks.availability = {
+    ready: true,
+    byAgent: new Map([['claude', { agent: 'claude', state: 'refused', reason: 'wsl' }]])
+  }
+  hook.rerender()
+  expect(claude()).toMatchObject({ reason: 'wsl' })
+  expect(hook.result.current.rows.find((row) => row.agent === 'codex')).toMatchObject({
+    kind: 'chat'
+  })
+  expect(mocks.support).not.toHaveBeenCalled()
 })

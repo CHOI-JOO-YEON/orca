@@ -1,7 +1,10 @@
 import { waitForPromiseWithSignal } from '../../../../shared/abort-signal-reason'
 import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import { useShallow } from 'zustand/react/shallow'
-import { STRUCTURED_AGENT_SESSION_REGISTERED_AGENTS_RUNTIME_CAPABILITY as CATALOG } from '../../../../shared/protocol-version'
+import {
+  STRUCTURED_AGENT_SESSION_AVAILABILITY_RUNTIME_CAPABILITY as AVAILABILITY,
+  STRUCTURED_AGENT_SESSION_REGISTERED_AGENTS_RUNTIME_CAPABILITY as CATALOG
+} from '../../../../shared/protocol-version'
 import { LOCAL_EXECUTION_HOST_ID, parseExecutionHostId } from '../../../../shared/execution-host'
 import { lastVerifiedRuntimeStatus } from '../../../../shared/runtime-host-status'
 import { isTuiAgent } from '../../../../shared/tui-agent-config'
@@ -26,6 +29,7 @@ import {
   relearnHostStructuredAgents
 } from '@/runtime/host-structured-agents'
 import { getRuntimeEnvironmentRevision } from '@/runtime/runtime-environment-revision'
+import { useHostStructuredAgentAvailability } from '@/runtime/use-host-structured-agent-availability'
 import { buildNewTabAgentMenuRows, type HostChatAnswer } from '@/lib/new-tab-agent-menu-rows'
 import {
   readLocalRuntimeCapabilitiesOrUnknown,
@@ -172,6 +176,24 @@ export function useNewTabAgentMenuRows(
   // Agents this open's reads gave up on; cleared with the reads so the next open asks again.
   const [unanswered, setUnanswered] = useState<ReadonlySet<TuiAgent>>(new Set())
   const chatEnabled = isNativeChatEnabled(settings)
+  // Why a branch: a host publishing availability answers every agent at once from its own stream;
+  // an older host keeps the per-agent createSupport reads below, unchanged.
+  const published =
+    Boolean(structuredAgentSessionTargetForHost(facts.executionHostId)) &&
+    input.hostCapabilities?.includes(AVAILABILITY) === true
+  const availability = useHostStructuredAgentAvailability(
+    published
+      ? {
+          executionHostId: facts.executionHostId,
+          runtimeId:
+            parseExecutionHostId(facts.executionHostId)?.kind === 'runtime'
+              ? facts.runtimeId
+              : null,
+          worktreeId,
+          contact: `${facts.pairingRevision}:${facts.connection}:${facts.reconnect}`
+        }
+      : null
+  )
   useEffect(() => {
     if (!open || !chatEnabled) {
       return
@@ -191,7 +213,7 @@ export function useNewTabAgentMenuRows(
   }, [open, chatEnabled, facts, worktreeId, catalogLoaded])
   useEffect(() => {
     const target = structuredAgentSessionTargetForHost(owner.executionHostId)
-    if (!open || !target || !owner.eligible) {
+    if (!open || !target || !owner.eligible || published) {
       return
     }
     let active = true
@@ -238,7 +260,7 @@ export function useNewTabAgentMenuRows(
       controller.abort()
       setUnanswered(new Set())
     }
-  }, [owner, ownerKey, open, worktreeId])
+  }, [owner, ownerKey, open, worktreeId, published])
   const asking = structuredAgentSessionTargetForHost(owner.executionHostId)
     ? owner.eligible.split(',')
     : []
@@ -252,6 +274,21 @@ export function useNewTabAgentMenuRows(
       if (!['yes', 'not-yet-known'].includes(preliminary)) {
         return preliminary
       }
+      if (availability) {
+        // One complete generation answers every row at once; until it lands, rows wait disabled.
+        if (!availability.ready) {
+          return 'not-yet-known'
+        }
+        const answer = availability.byAgent.get(agent)
+        // An agent the host could not check leaves this client's facts, as an unanswered read does.
+        return answer && answer.state !== 'unknown'
+          ? answerFromSupport(
+              answer.state === 'available'
+                ? { kind: 'admitted' }
+                : { kind: 'declined', ...(answer.reason ? { reason: answer.reason } : {}) }
+            )
+          : preliminary
+      }
       const recorded = readHostChatAnswer(ownerKey, agent)
       if (recorded) {
         return recorded
@@ -263,5 +300,5 @@ export function useNewTabAgentMenuRows(
         : preliminary
     }
   }).map((row) => ({ ...row, executionHostId: parseExecutionHostId(facts.executionHostId)?.id }))
-  return { rows, detection }
+  return { rows, detection, availability }
 }
