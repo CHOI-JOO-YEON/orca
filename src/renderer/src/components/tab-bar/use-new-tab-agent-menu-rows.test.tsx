@@ -150,12 +150,14 @@ it('reads a publishing host from its one complete answer and never asks per agen
   const hook = renderHook(() => useNewTabAgentMenuRows('four', true, { kind: 'local' }))
   const claude = () => hook.result.current.rows.find((row) => row.agent === 'claude')
   expect(claude()).toMatchObject({ kind: 'chat-unavailable', reason: 'pending' })
+  expect(hook.result.current.settling).toBe(true)
   mocks.availability = {
     ready: true,
     byAgent: new Map([['claude', { agent: 'claude', state: 'refused', reason: 'wsl' }]])
   }
   hook.rerender()
   expect(claude()).toMatchObject({ reason: 'wsl' })
+  expect(hook.result.current.settling).toBe(false)
   expect(hook.result.current.rows.find((row) => row.agent === 'codex')).toMatchObject({
     kind: 'chat'
   })

@@ -94,8 +94,11 @@ export function useNewTabAgentMenuRows(
   open: boolean,
   detectionTarget: AgentDetectionTarget | undefined
 ) {
-  const acquired = useDetectedAgents(open ? detectionTarget : undefined)
-  // Why: only acquisition waits for the open menu; closing it must not erase the known inventory.
+  // Why: hidden worktrees stay mounted, so only the shown one holds its host's checks.
+  const worktreeShown = useAppStore((state) => state.activeWorktreeId === worktreeId)
+  // Why: acquiring while the workspace is shown means the first open already knows its agents.
+  const acquired = useDetectedAgents(open || worktreeShown ? detectionTarget : undefined)
+  // Closing the menu or leaving the workspace must not erase the known inventory.
   const storedIds = useAppStore((state) =>
     detectionTarget ? readDetectedAgentsForTarget(state, detectionTarget) : null
   )
@@ -181,8 +184,6 @@ export function useNewTabAgentMenuRows(
   const publishing = input.hostCapabilities?.includes(AVAILABILITY) === true
   const published =
     Boolean(structuredAgentSessionTargetForHost(facts.executionHostId)) && publishing
-  // Why: hidden worktrees stay mounted, so only the shown one holds its host's checks.
-  const worktreeShown = useAppStore((state) => state.activeWorktreeId === worktreeId)
   const availability = useHostStructuredAgentAvailability(
     published && chatEnabled && (worktreeShown || open)
       ? {
@@ -266,6 +267,12 @@ export function useNewTabAgentMenuRows(
   const asking = structuredAgentSessionTargetForHost(owner.executionHostId)
     ? owner.eligible.split(',')
     : []
+  // Only reads that settle on their own count: a failed stream is ready, and legacy reads give up.
+  let waiting =
+    detection.detectedIds === null &&
+    !detection.detectionFailed &&
+    !detection.needsServerUpdate &&
+    detectionTarget !== undefined
   const rows = buildNewTabAgentMenuRows({
     settings,
     detectedOnHost: detection.detectedIds,
@@ -277,8 +284,9 @@ export function useNewTabAgentMenuRows(
         return preliminary
       }
       if (availability) {
-        // One complete generation answers every row at once; until it lands, rows wait disabled.
+        // One complete generation answers every row; until it lands, the menu holds a placeholder.
         if (!availability.ready) {
+          waiting = true
           return 'not-yet-known'
         }
         const answer = availability.byAgent.get(agent)
@@ -295,12 +303,14 @@ export function useNewTabAgentMenuRows(
       if (recorded) {
         return recorded
       }
-      // Why: a row stays quietly disabled while its host is asked, so it never flips under the pointer.
+      // Why: the menu holds a placeholder while its host is asked, so no row moves under the pointer.
       // A host that could not answer leaves this client's facts; the click's admission owns a refusal.
-      return open && asking.includes(agent) && !unanswered.has(agent)
-        ? 'not-yet-known'
-        : preliminary
+      if (open && asking.includes(agent) && !unanswered.has(agent)) {
+        waiting = true
+        return 'not-yet-known'
+      }
+      return preliminary
     }
   }).map((row) => ({ ...row, executionHostId: parseExecutionHostId(facts.executionHostId)?.id }))
-  return { rows, detection, availability }
+  return { rows, detection, availability, settling: waiting }
 }

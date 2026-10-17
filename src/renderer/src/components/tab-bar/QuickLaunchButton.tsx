@@ -20,6 +20,7 @@ import { useOptionalShortcutLabel } from '@/hooks/useShortcutLabel'
 import type { TuiAgent } from '../../../../shared/tui-agent'
 import type { LaunchSource } from '../../../../shared/telemetry-events'
 import { translate } from '@/i18n/i18n'
+import { cn } from '@/lib/utils'
 import type { NewTabAgentMenuRow } from '@/lib/new-tab-agent-menu-rows'
 import { useNewTabAgentMenuRows, type NewTabAgentMenuModel } from './use-new-tab-agent-menu-rows'
 import { useAgentDetectionTargetForWorktree } from '@/hooks/useAgentDetectionTarget'
@@ -49,6 +50,8 @@ export type QuickLaunchAgentMenuItemsProps = {
   /** Nothing to send: e.g. every note is already on its way, so no agent is started. */
   disabled?: boolean
 }
+
+const PLACEHOLDER_WIDTHS = ['w-3/5', 'w-1/2', 'w-2/3', 'w-2/5', 'w-3/4', 'w-1/3', 'w-4/5', 'w-1/4']
 
 function getCatalogEntry(agent: TuiAgent): { id: TuiAgent; label: string } | null {
   return getAgentCatalog().find((a) => a.id === agent) ?? null
@@ -164,6 +167,7 @@ export function ProjectedAgentMenuItems({
 }): React.JSX.Element {
   const {
     rows,
+    settling,
     detection: { detectedIds, detectionFailed, needsServerUpdate }
   } = model
   const defaultAgent = useAppStore((s) => s.settings?.defaultTuiAgent)
@@ -174,6 +178,27 @@ export function ProjectedAgentMenuItems({
     openSettingsTarget({ pane: 'agents', repoId: null })
     openSettingsPage()
   }, [openSettingsPage, openSettingsTarget])
+  if (settling) {
+    // Why: rows fill in once when every answer is known, instead of reshuffling under the pointer.
+    return (
+      <>
+        {PLACEHOLDER_WIDTHS.slice(0, Math.max(rows.length, 2)).map((width) => (
+          <DropdownMenuItem
+            key={width}
+            variant="launch"
+            disabled
+            aria-label={translate(
+              'auto.components.tab.bar.QuickLaunchButton.agentsLoading',
+              'Loading agents'
+            )}
+          >
+            <span className={cn('h-2 rounded-full bg-muted', width)} />
+          </DropdownMenuItem>
+        ))}
+        <AgentSettingsMenuItem onSelect={openAgentSettings} />
+      </>
+    )
+  }
   return (
     <>
       {rows.length === 0 && (detectedIds !== null || detectionFailed || needsServerUpdate) ? (
@@ -274,14 +299,20 @@ export function ProjectedAgentMenuItems({
           </React.Fragment>
         )
       })}
-      <DropdownMenuItem
-        onSelect={openAgentSettings}
-        className="gap-2 rounded-[7px] px-2 py-1.5 text-[12px] leading-5 font-medium text-muted-foreground"
-      >
-        <SettingsIcon className="size-4" />
-        {translate('auto.components.tab.bar.QuickLaunchButton.348a04c1ad', 'Agent settings…')}
-      </DropdownMenuItem>
+      <AgentSettingsMenuItem onSelect={openAgentSettings} />
     </>
+  )
+}
+
+function AgentSettingsMenuItem({ onSelect }: { onSelect: () => void }): React.JSX.Element {
+  return (
+    <DropdownMenuItem
+      onSelect={onSelect}
+      className="gap-2 rounded-[7px] px-2 py-1.5 text-[12px] leading-5 font-medium text-muted-foreground"
+    >
+      <SettingsIcon className="size-4" />
+      {translate('auto.components.tab.bar.QuickLaunchButton.348a04c1ad', 'Agent settings…')}
+    </DropdownMenuItem>
   )
 }
 
