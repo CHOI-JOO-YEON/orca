@@ -49,7 +49,7 @@ import {
   trackStructuredLaunchConfirmationDeadline
 } from './structured-agent-session-launch-prompt-outcome'
 import { repeatedStructuredLaunchAttempt } from './structured-agent-session-launch-request'
-import { structuredAgentSessionCreateFingerprint } from '../../../shared/structured-agent-session-mutation'
+import { releaseStructuredLaunchSource } from './structured-agent-session-launch-source-handoff'
 
 export type { StructuredAgentLaunchOptions, StructuredAgentLaunchReceipt }
 export {
@@ -156,35 +156,6 @@ function restartStructuredLaunchState(state: StructuredLaunchState): void {
 
 function promptOwner(options: StructuredAgentLaunchOptions): { callerKeepsText?: true } {
   return options.promptKeptByCaller ? { callerKeepsText: true } : {}
-}
-
-/** A joiner without the terminal pane must not fail when that pane closes: the unsent create hands
- *  off now and resumes by conversation id, as a History click does. */
-function releaseStructuredLaunchSource(state: StructuredLaunchState): void {
-  const { intent } = state
-  const handoff = intent.beforeCreate
-  if (!handoff) {
-    return
-  }
-  delete intent.beforeCreate
-  handoff()
-  const resumeFrom = intent.params.resumeFrom
-  if (!resumeFrom?.cliSource) {
-    return
-  }
-  const { cliSource: _paneSource, ...resumeById } = resumeFrom
-  const params = { ...intent.params, resumeFrom: resumeById }
-  intent.params = {
-    ...params,
-    envelope: {
-      ...params.envelope,
-      payloadFingerprint: structuredAgentSessionCreateFingerprint({
-        sessionId: intent.sessionId,
-        ...params
-      })
-    }
-  }
-  setStructuredLaunchState(state)
 }
 
 function joinStructuredLaunchState(
