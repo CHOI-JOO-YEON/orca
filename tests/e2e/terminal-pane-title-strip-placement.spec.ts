@@ -94,6 +94,15 @@ test.describe('Terminal Panes', () => {
     await titleBar.evaluate((element, path) => {
       const dataTransfer = new DataTransfer()
       dataTransfer.setData('text/x-orca-file-path', path)
+      // Internal drops are refused without the source owner an Explorer drag records.
+      dataTransfer.setData(
+        'application/x-orca-workspace-file-source',
+        JSON.stringify({
+          executionHostId: 'local',
+          workspaceId: window.__store?.getState().activeWorktreeId,
+          version: 1
+        })
+      )
       element.dispatchEvent(
         new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer })
       )
