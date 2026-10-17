@@ -74,7 +74,7 @@ describe('managedRuntimeInstallCard', () => {
       tone: 'failed',
       title: "Couldn't download Fake",
       detail: 'Check your network connection or proxy, then try again.',
-      hint: '112 MB download',
+      hint: '112 MB download.',
       action: { label: 'Try again' }
     })
     expect(

@@ -19212,7 +19212,6 @@
       "heroBody": "{{size}} MB の一度きりのダウンロードです。このコンピューターに保存され、すべての {{agent}} チャットで共有されます。",
       "heroBodyNoSize": "一度きりのダウンロードです。このコンピューターに保存され、すべての {{agent}} チャットで共有されます。",
       "stripSize": "{{size}} MB のダウンロード、このコンピューターに保存されます",
-      "downloadSize": "{{size}} MB のダウンロード",
       "installShort": "インストール",
       "tryAgain": "再試行",
       "cancelShort": "キャンセル",

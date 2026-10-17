@@ -170,7 +170,7 @@ export function managedRuntimeInstallCard(
   const size = state.downloadBytes ? String(Math.ceil(state.downloadBytes / 1_000_000)) : null
   const sizeHint =
     hero && size !== null
-      ? translate('components.managed-runtime.downloadSize', '{{size}} MB download', { size })
+      ? translate('components.managed-runtime.downloadSize', '{{size}} MB download.', { size })
       : null
   const install = (label: string): ManagedRuntimeInstallAction => ({ kind: 'install', label })
   const retry = translate('components.managed-runtime.retry', 'Retry installation')

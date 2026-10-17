@@ -19316,7 +19316,6 @@
       "heroBody": "Téléchargement unique de {{size}} Mo. Il est enregistré sur cet ordinateur et partagé par toutes les conversations {{agent}}.",
       "heroBodyNoSize": "Téléchargement unique. Il est enregistré sur cet ordinateur et partagé par toutes les conversations {{agent}}.",
       "stripSize": "Téléchargement de {{size}} Mo, enregistré sur cet ordinateur",
-      "downloadSize": "Téléchargement de {{size}} Mo",
       "installShort": "Installer",
       "tryAgain": "Réessayer",
       "cancelShort": "Annuler",
