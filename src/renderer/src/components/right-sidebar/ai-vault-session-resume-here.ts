@@ -12,6 +12,10 @@ import { structuredAgentSessionPaneKey } from '../../../../shared/structured-age
 import type { Tab } from '../../../../shared/tab-types'
 import type { AiVaultSessionRowChatActions } from './ai-vault-session-chat-action'
 import { resumeAiVaultSessionInNewChat } from './ai-vault-session-resume-in-chat-launch'
+import {
+  readNativeChatComposerDraft,
+  structuredAgentSessionDraftScopeKey
+} from '../native-chat/native-chat-composer-draft-store'
 
 /** The chat `/resume` was typed in; a picked row's conversation takes its place. */
 export type AiVaultResumeHere = {
@@ -25,7 +29,8 @@ export type AiVaultResumeHere = {
 
 /**
  * A tab is one conversation, so "resume here" opens the picked conversation's own chat right after
- * this one and closes this one once that chat exists. False: the row can't take this chat's place.
+ * this one and closes this one once that chat exists. False: the row can't take this chat's place;
+ * otherwise the pick settles once its outcome is known.
  */
 export function resumeAiVaultSessionHere(args: {
   session: AiVaultSession
@@ -35,17 +40,17 @@ export function resumeAiVaultSessionHere(args: {
     'canJumpToOriginalPane' | 'resumeInNewChatWorkspaceId'
   >
   jump: (session: AiVaultSession) => void
-}): boolean {
+}): false | Promise<void> {
   const { session, here, actions } = args
   const structured = session.structuredSession
   if (structured && structured.sessionId === findChatTab(here)?.entityId) {
     here.dismiss()
-    return true
+    return Promise.resolve()
   }
   // One conversation never runs in two chats, so one already open is switched to.
   if (actions.canJumpToOriginalPane) {
     args.jump(session)
-    return true
+    return Promise.resolve()
   }
   if (!here.agent || !aiVaultHistoryAgents(here.agent).includes(session.agent)) {
     return false
@@ -54,13 +59,12 @@ export function resumeAiVaultSessionHere(args: {
     if (structured.workspaceId !== here.workspaceId) {
       return false
     }
-    void activateAiVaultStructuredSession(session).then(() => {
+    return activateAiVaultStructuredSession(session).then(() => {
       // It also settles true after a reopen it could only report, so only a tab that exists replaces.
       if (findChatTabWhere(here.workspaceId, (tab) => tab.entityId === structured.sessionId)) {
         closeReplacedChat(here)
       }
     })
-    return true
   }
   if (
     actions.resumeInNewChatWorkspaceId !== here.workspaceId ||
@@ -70,6 +74,10 @@ export function resumeAiVaultSessionHere(args: {
   }
   const focus = captureNativeChatComposerFocusIntent()
   let openedTabId: string | null = null
+  let resolve = (): void => undefined
+  const settled = new Promise<void>((settle) => {
+    resolve = settle
+  })
   void resumeAiVaultSessionInNewChat(
     session,
     session.agent,
@@ -86,16 +94,18 @@ export function resumeAiVaultSessionHere(args: {
         cancel: focus.cancel
       },
       onSettled: (settlement) => {
-        if (settlement.kind === 'structured') {
+        if (settlement?.kind === 'structured') {
           closeReplacedChat(here)
-        } else if (openedTabId) {
-          // No failed tab is left; closing it hands its group back to the chat it would replace.
+        } else if (settlement?.kind === 'failed' && openedTabId) {
+          // A refusal is toasted, so its tab goes and the group falls back to the chat it would
+          // replace. An unknown outcome keeps both: that tab has its own badge and Retry.
           useAppStore.getState().closeUnifiedTab(openedTabId)
         }
+        resolve()
       }
     }
   )
-  return true
+  return settled
 }
 
 function findChatTabWhere(workspaceId: string, matches: (tab: Tab) => boolean): Tab | undefined {
@@ -113,12 +123,14 @@ function findChatTab(here: AiVaultResumeHere): Tab | undefined {
 function closeReplacedChat(here: AiVaultResumeHere): void {
   const state = useAppStore.getState()
   const tab = findChatTab(here)
-  if (!tab) {
+  if (!tab || tab.isPinned) {
     return
   }
-  // Why: closing a chat stops its agent, so one still replying or asking stays open beside the new one.
+  // Why: closing a chat stops its agent, so only a finished turn closes; one replying, asking,
+  // starting, or with nothing reported yet stays open beside the new chat, as does an unsent draft.
   const status = state.agentStatusByPaneKey[structuredAgentSessionPaneKey(tab.id, tab.entityId)]
-  if (!status || status.state === 'done') {
+  const draft = readNativeChatComposerDraft(structuredAgentSessionDraftScopeKey(tab.entityId))
+  if (status?.state === 'done' && draft.text.trim() === '' && draft.images.length === 0) {
     state.closeUnifiedTab(tab.id)
   }
 }

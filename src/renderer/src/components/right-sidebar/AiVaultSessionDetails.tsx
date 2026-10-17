@@ -61,7 +61,7 @@ export function SessionInlineDetails({
   }
   onResumeInWorktree: () => void
   onResumeInNewTab: () => void
-  subagentResume?: AiVaultSubagentResumeActions
+  subagentResume?: AiVaultSubagentResumeActions | null
   onContinueInNewSession?: () => void
   onResumeInNewChat?: () => void
   onResumeInNewCli?: () => void

@@ -240,38 +240,51 @@ describe('Session History keyboard selection', () => {
     const { press } = renderList({
       resumeHere: { tabId: 'old', workspaceId, agent: 'claude', dismiss: vi.fn() }
     })
+    const settle = async () =>
+      act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 0))
+      })
     const pickFirstRow = async (settlement: StructuredAgentLaunchSettlement) => {
       launch.settlement = settlement
       act(() => store().activateTab('old', { worktreeId: workspaceId }))
       press('Enter')
-      await act(async () => {
-        await new Promise((resolve) => setTimeout(resolve, 0))
-      })
+      await settle()
     }
+
+    press('Enter', true)
+    await settle()
+    expect(order()).toEqual(['old', 'other'])
 
     await pickFirstRow({ kind: 'failed', error: new Error('refused') })
     expect(order()).toEqual(['old', 'other'])
     expect(store().groupsByWorktree[workspaceId]?.[0]?.activeTabId).toBe('old')
 
-    // A chat still replying keeps running beside the one that replaces it.
+    // An unknown outcome keeps both tabs; the new one carries its own badge and Retry.
+    await pickFirstRow({ kind: 'visibility-unknown', sessionId: 'new' })
+    expect(order()).toEqual(['old', resumed, 'other'])
+    act(() => store().closeUnifiedTab(resumed))
+
+    // Only a finished turn closes: a chat still replying keeps running beside its replacement.
     const paneKey = structuredAgentSessionPaneKey('old', 'old')
-    useAppStore.setState({
-      agentStatusByPaneKey: {
-        [paneKey]: {
-          state: 'working',
-          prompt: '',
-          updatedAt: 0,
-          stateStartedAt: 0,
-          paneKey,
-          stateHistory: []
+    const status = (state: 'working' | 'done') =>
+      useAppStore.setState({
+        agentStatusByPaneKey: {
+          [paneKey]: {
+            state,
+            prompt: '',
+            updatedAt: 0,
+            stateStartedAt: 0,
+            paneKey,
+            stateHistory: []
+          }
         }
-      }
-    })
+      })
+    status('working')
     await pickFirstRow({ kind: 'structured', sessionId: 'new' })
     expect(order()).toEqual(['old', resumed, 'other'])
 
     act(() => store().closeUnifiedTab(resumed))
-    useAppStore.setState({ agentStatusByPaneKey: {} })
+    status('done')
     await pickFirstRow({ kind: 'structured', sessionId: 'new' })
     expect(order()).toEqual([resumed, 'other'])
   })

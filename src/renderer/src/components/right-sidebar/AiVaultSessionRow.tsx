@@ -119,7 +119,7 @@ export function VaultSessionRow({
   const startResumeDrag = useCallback(
     (event: React.DragEvent<HTMLElement>): void => {
       event.stopPropagation()
-      if (resumeDisabled) {
+      if (!draggable) {
         event.preventDefault()
         return
       }
@@ -142,7 +142,7 @@ export function VaultSessionRow({
       })
       window.dispatchEvent(new Event(AI_VAULT_SESSION_DRAG_START_EVENT))
     },
-    [realHomeResumeStartup, resumeDisabled, session, resumeStartup, title]
+    [draggable, realHomeResumeStartup, session, resumeStartup, title]
   )
 
   const body = (
@@ -184,7 +184,7 @@ export function VaultSessionRow({
                   'Drag to resume in a new tab'
                 )
           }
-          onDragStart={draggable ? startResumeDrag : undefined}
+          onDragStart={startResumeDrag}
           onDragEnd={() => {
             window.dispatchEvent(new Event(AI_VAULT_SESSION_DRAG_END_EVENT))
           }}
@@ -253,11 +253,12 @@ export function VaultSessionRow({
           resumeActions={resumeActions}
           onResumeInWorktree={onResumeInWorktree}
           onResumeInNewTab={onResumeInNewTab}
-          subagentResume={onPick ? undefined : subagentResume}
+          subagentResume={onPick ? null : subagentResume}
           onContinueInNewSession={onContinueInNewSession}
           onResumeInNewChat={onResumeInNewChat}
           onResumeInNewCli={onResumeInNewCli}
-          onOpenLog={onOpenLog}
+          // The unsaved notice's "open the log" hint needs the button the picker hides.
+          onOpenLog={onPick ? undefined : onOpenLog}
           actionsHidden={Boolean(onPick)}
         />
       ) : null}

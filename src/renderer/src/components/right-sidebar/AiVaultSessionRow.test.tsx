@@ -153,10 +153,31 @@ describe('VaultSessionRow in the /resume picker', () => {
   it('only resumes on click: no menus, drag or action buttons, and the chevron still shows details', async () => {
     const onPick = vi.fn()
     const onToggleDetails = vi.fn()
-    const { container } = renderRow({ onPick, onToggleDetails, detailsExpanded: true })
+    const subagent = {
+      ...session,
+      id: 'sub',
+      title: 'Sub task',
+      filePath: '/home/a/.gemini/sub.json'
+    }
+    Object.defineProperty(window, 'api', {
+      configurable: true,
+      value: {
+        aiVault: {
+          getFirstUserPrompt: vi.fn().mockResolvedValue({ prompt: null }),
+          listSubagentSessions: vi.fn().mockResolvedValue({ sessions: [subagent], issues: [] })
+        }
+      }
+    })
+    const { container } = renderRow({
+      session: { ...session, subagentTranscriptCount: 1 },
+      onPick,
+      onToggleDetails,
+      detailsExpanded: true
+    })
     const user = userEvent.setup()
 
-    expect(screen.getByText('Latest turns')).toBeTruthy()
+    expect(await screen.findByText('Sub task')).toBeTruthy()
+    expect(screen.queryByTitle('View Log')).toBeNull()
     expect(screen.queryByTestId('ai-vault-session-more-actions')).toBeNull()
     expect(screen.queryByRole('button', { name: 'Resume in New Tab' })).toBeNull()
     expect(container.querySelector('[draggable="true"]')).toBeNull()

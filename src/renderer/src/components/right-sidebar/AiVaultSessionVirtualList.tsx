@@ -182,9 +182,17 @@ export function AiVaultSessionVirtualList({
     })
   }, [])
 
-  const pickHere = (session: AiVaultSession): boolean =>
-    resumeHere !== undefined &&
-    resumeAiVaultSessionHere({
+  // Why: the dialog stays up until the picked chat opens, and a second pick meanwhile would start
+  // a second resume; each pick settles, so this never stays set.
+  const pickInFlight = useRef(false)
+  const pickHere = (session: AiVaultSession): boolean => {
+    if (!resumeHere) {
+      return false
+    }
+    if (pickInFlight.current) {
+      return true
+    }
+    const picked = resumeAiVaultSessionHere({
       session,
       here: resumeHere,
       actions: resolveAiVaultSessionRowChatActions({
@@ -197,6 +205,16 @@ export function AiVaultSessionVirtualList({
       }),
       jump: onJumpToOriginalPane
     })
+    if (!picked) {
+      return false
+    }
+    pickInFlight.current = true
+    const release = (): void => {
+      pickInFlight.current = false
+    }
+    void picked.then(release, release)
+    return true
+  }
   // Enter resumes the row in the chat; a row that can't shows its details instead.
   const activateSession = (session: AiVaultSession, index: number): void => {
     if (!pickHere(session)) {
