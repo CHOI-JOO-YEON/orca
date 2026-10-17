@@ -269,7 +269,7 @@ export async function call(
   client?: {
     clientId?: string
     clientKind?: 'mobile' | 'runtime'
-    clientCapabilities?: string[]
+    clientCapabilities?: readonly string[]
     signal?: AbortSignal
   },
   runtimeOverrides: Record<string, unknown> = {},

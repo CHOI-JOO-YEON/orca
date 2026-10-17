@@ -66,6 +66,7 @@ import { sendStructuredAgentSessionForClient } from './structured-agent-session-
 import { getStructuredAgentSessionHost } from '../../../native-chat/agent-session-wire/structured-agent-session-registry'
 import { structuredSessionNeverStarted } from '../../agent-session-record-founding'
 import { LOCAL_EXECUTION_HOST_ID } from '../../../../shared/execution-host'
+import { AGENT_SESSION_SNAPSHOT_CATCH_UP_CLIENT_CAPABILITY } from '../../../../shared/protocol-version'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 import {
   noteStructuredAgentSessionClose,
@@ -250,6 +251,13 @@ export const STRUCTURED_AGENT_SESSION_METHODS = [
             )
           ),
         ...(params.cursor ? { cursor: params.cursor } : {}),
+        // Desktop snapshots require settled send echoes and independent current requests.
+        snapshotCatchUp:
+          ctx.clientKind === undefined ||
+          ctx.clientKind === 'mobile' ||
+          (ctx.clientCapabilities?.includes(AGENT_SESSION_SNAPSHOT_CATCH_UP_CLIENT_CAPABILITY) ===
+            true &&
+            clientReadsCurrentRequests(ctx)),
         // Every phone's app, whatever its version, ends a stream over a frame its bridge cannot carry.
         ...(ctx.clientKind === 'mobile' ? { boundedFrames: true } : {})
       })
