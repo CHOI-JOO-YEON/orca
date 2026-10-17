@@ -107,12 +107,24 @@ export async function resolveStructuredAgentSessionAdoptionForCreate(input: {
   try {
     const transcriptPath = input.resolveTranscriptPath?.()
     const candidates = input.transcriptImport.accountHomeCandidates(input)
+    // Each account's store is resolved once, so the hook path, the lookup and its re-admission
+    // all judge the same place even if the environment changes mid-create.
+    const stores = new Map<AgentSessionAccountHome, string | null>()
+    const storeOf = (accountHome: AgentSessionAccountHome): string | null => {
+      if (!stores.has(accountHome)) {
+        stores.set(accountHome, input.transcriptImport.conversationStore({
+          accountHome, launchEnv: input.launchEnv
+        }))
+      }
+      return stores.get(accountHome) ?? null
+    }
     let admitted: { accountHome: AgentSessionAccountHome; path: string } | null = null
     if (transcriptPath) {
       for (const accountHome of candidates) {
-        const path = await input.transcriptImport.admitTranscriptPath({
-          accountHome, transcriptPath, launchEnv: input.launchEnv
-        })
+        const store = storeOf(accountHome)
+        const path = store
+          ? await input.transcriptImport.admitTranscriptPath({ store, transcriptPath })
+          : null
         if (path) {
           admitted = { accountHome, path }
           break
@@ -139,11 +151,21 @@ export async function resolveStructuredAgentSessionAdoptionForCreate(input: {
             }
           }
         }
-        const found = await input.transcriptImport.findTranscript({ ...args, strictErrors: true })
+        const store = storeOf(args.accountHome)
+        if (!store) {
+          return null
+        }
+        const found = await input.transcriptImport.findTranscript({
+          providerSessionId: args.providerSessionId,
+          store,
+          launchEnv: args.launchEnv,
+          workspaceCwd: args.workspaceCwd,
+          strictErrors: true
+        })
         if (!found) {
           return null
         }
-        const path = await input.transcriptImport.admitTranscriptPath({ ...args, transcriptPath: found })
+        const path = await input.transcriptImport.admitTranscriptPath({ store, transcriptPath: found })
         if (!path) {
           throw new Error('The conversation path is outside its account storage.')
         }

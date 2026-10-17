@@ -58,7 +58,7 @@ it('creates from the host hook path when Claude filename differs, then checks ac
   ])
   const admit = importer.admitTranscriptPath.bind(importer)
   const admission = vi.spyOn(importer, 'admitTranscriptPath').mockImplementation((args) => {
-    if (!('path' in args.accountHome) || args.accountHome.path !== root) {
+    if (args.store !== join(root, 'projects')) {
       throw Object.assign(new Error('Account inaccessible'), { code: 'EACCES' })
     }
     return admit(args)
@@ -96,6 +96,24 @@ it('creates from the host hook path when Claude filename differs, then checks ac
     selectedAccountHome, launchEnv: {}, workspaceCwd: root, resolveTranscriptPath: sourcePath
   })).rejects.toMatchObject({ refusal: { details: { reason: 'transcriptUnreadable' } } })
   expect(find).not.toHaveBeenCalled()
+})
+
+it('judges the lookup and its re-admission against one store resolved once per account', async () => {
+  const transcriptPath = await file(join(root, 'projects', 'folder', `${id}.jsonl`), [])
+  const importer = CLAUDE_CLI_CONVERSATIONS.transcriptImport!
+  const selectedAccountHome = { variable: 'CLAUDE_CONFIG_DIR', path: root }
+  vi.spyOn(importer, 'accountHomeCandidates').mockReturnValue([selectedAccountHome])
+  const store = vi.spyOn(importer, 'conversationStore')
+  const find = vi.spyOn(importer, 'findTranscript')
+  const admission = vi.spyOn(importer, 'admitTranscriptPath')
+  const adoption = await resolveStructuredAgentSessionAdoptionForCreate({
+    settings: {}, agent: 'claude', transcriptImport: importer, providerSessionId: id,
+    selectedAccountHome, launchEnv: {}, workspaceCwd: root
+  })
+  expect(adoption.transcriptPath).toBe(transcriptPath)
+  expect(store).toHaveBeenCalledOnce()
+  expect(find.mock.calls[0]?.[0].store).toBe(join(root, 'projects'))
+  expect(admission.mock.calls[0]?.[0].store).toBe(join(root, 'projects'))
 })
 
 it.skipIf(process.platform === 'win32')('reports a not-yet-saved conversation under a linked account folder as unsaved', async () => {
