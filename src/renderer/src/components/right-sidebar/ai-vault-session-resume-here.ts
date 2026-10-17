@@ -1,6 +1,5 @@
 import { useAppStore } from '@/store'
 import { activateAiVaultStructuredSession } from '@/lib/activate-ai-vault-structured-session'
-import { findStructuredAgentSessionTab } from '@/lib/structured-agent-session-tab-activation'
 import { newAgentLaunchRequestId } from '@/lib/agent-launch-request-id'
 import { captureNativeChatComposerFocusIntent } from '@/components/native-chat/use-native-chat-composer-reveal-focus'
 import {
@@ -57,8 +56,7 @@ export function resumeAiVaultSessionHere(args: {
     }
     void activateAiVaultStructuredSession(session).then(() => {
       // It also settles true after a reopen it could only report, so only a tab that exists replaces.
-      const state = useAppStore.getState()
-      if (findStructuredAgentSessionTab(state.unifiedTabsByWorktree, structured)) {
+      if (findChatTabWhere(here.workspaceId, (tab) => tab.entityId === structured.sessionId)) {
         closeReplacedChat(here)
       }
     })
@@ -100,12 +98,16 @@ export function resumeAiVaultSessionHere(args: {
   return true
 }
 
-function findChatTab(here: AiVaultResumeHere): Tab | undefined {
+function findChatTabWhere(workspaceId: string, matches: (tab: Tab) => boolean): Tab | undefined {
   return useAppStore
     .getState()
-    .unifiedTabsByWorktree[here.workspaceId]?.find(
-      (tab) => tab.id === here.tabId && tab.contentType === 'agent-session'
+    .unifiedTabsByWorktree[workspaceId]?.find(
+      (tab) => tab.contentType === 'agent-session' && matches(tab)
     )
+}
+
+function findChatTab(here: AiVaultResumeHere): Tab | undefined {
+  return findChatTabWhere(here.workspaceId, (tab) => tab.id === here.tabId)
 }
 
 function closeReplacedChat(here: AiVaultResumeHere): void {

@@ -24,10 +24,9 @@ vi.mock('./AiVaultSessionRow', () => ({
   VaultSessionRow: (props: { session: AiVaultSession }) => <div>{props.session.title}</div>
 }))
 // The host's side of a resumed chat: it admits the chat, then the launch settles as the test says.
-const launch = vi.hoisted(() => {
-  const settlement: StructuredAgentLaunchSettlement = { kind: 'structured', sessionId: 'new' }
-  return { settlement }
-})
+const launch = vi.hoisted((): { settlement: StructuredAgentLaunchSettlement } => ({
+  settlement: { kind: 'structured', sessionId: 'new' }
+}))
 vi.mock('@/lib/ai-vault-session-resume-preparation', () => ({
   prepareAiVaultSessionForResume: async (session: AiVaultSession) => session
 }))
