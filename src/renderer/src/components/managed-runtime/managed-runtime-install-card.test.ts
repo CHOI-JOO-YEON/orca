@@ -31,13 +31,14 @@ describe('managedRuntimeInstallCard', () => {
     const offer = managedRuntimeInstallCard(idle, 'Fake', 'hero')
     expect(offer).toMatchObject({
       title: 'Install Fake to start chatting',
-      detail: "One-time 112 MB download. It's saved on this computer and shared by every Fake chat.",
+      detail:
+        "One-time 112 MB download. It's shared by Fake chats on the computer running this chat.",
       hint: 'Also in Settings › Chat › Providers',
       action: { kind: 'install', label: 'Install Fake' }
     })
     expect(managedRuntimeInstallCard(idle, 'Fake', 'strip')).toMatchObject({
       title: 'Install Fake to continue',
-      detail: '112 MB download, saved on this computer',
+      detail: '112 MB download on the computer running this chat',
       action: { label: 'Install' }
     })
 
@@ -58,7 +59,6 @@ describe('managedRuntimeInstallCard', () => {
     expect(checking.progress).toMatchObject({ percent: null })
     expect(checking.steps?.map((step) => step.state)).toEqual(['done', 'done', 'current'])
 
-    // The host's network sentence repeats the title, so the card says it once.
     const failed = managedRuntimeInstallCard(
       {
         ...idle,
@@ -72,8 +72,8 @@ describe('managedRuntimeInstallCard', () => {
     )
     expect(failed).toMatchObject({
       tone: 'failed',
-      title: "Couldn't download Fake",
-      detail: 'Check your network connection or proxy, then try again.',
+      title: "Couldn't install Fake",
+      detail: "Couldn't download Fake. Check your network connection or proxy, then try again.",
       hint: '112 MB download.',
       action: { label: 'Try again' }
     })

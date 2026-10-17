@@ -6,7 +6,7 @@ import type {
 import { megabytes, type ManagedRuntimeInstallAction } from './managed-runtime-install-view'
 
 /** `hero`: the whole-pane message of a chat with no messages; `strip`: the slim line above the
- *  composer of a chat that has some. Both read one card, so they never disagree. */
+ *  composer outside that pane. Both read one card, so they never disagree. */
 export type ManagedRuntimeInstallLayout = 'hero' | 'strip'
 
 export type ManagedRuntimeInstallCardStep = { label: string; state: 'done' | 'current' | 'todo' }
@@ -109,19 +109,19 @@ function offerDetail(
       ? null
       : translate(
           'components.managed-runtime.stripSize',
-          '{{size}} MB download, saved on this computer',
+          '{{size}} MB download on the computer running this chat',
           { size }
         )
   }
   return size === null
     ? translate(
         'components.managed-runtime.heroBodyNoSize',
-        "One-time download. It's saved on this computer and shared by every {{agent}} chat.",
+        "One-time download. It's shared by {{agent}} chats on the computer running this chat.",
         { agent }
       )
     : translate(
         'components.managed-runtime.heroBody',
-        "One-time {{size}} MB download. It's saved on this computer and shared by every {{agent}} chat.",
+        "One-time {{size}} MB download. It's shared by {{agent}} chats on the computer running this chat.",
         { size, agent }
       )
 }
@@ -190,17 +190,14 @@ export function managedRuntimeInstallCard(
     }
   }
   if (operation?.kind === 'install' && operation.phase === 'failed') {
-    // The host's network sentence opens by repeating the title; say it once.
-    const echo = `Couldn't download ${agent}. `
-    const said =
-      operation.error ??
-      translate('components.managed-runtime.failed', 'Installation failed. Try again.')
     return {
       tone: 'failed',
-      title: translate('components.managed-runtime.failedTitle', "Couldn't download {{agent}}", {
+      title: translate('components.managed-runtime.failedTitle', "Couldn't install {{agent}}", {
         agent
       }),
-      detail: said.startsWith(echo) ? said.slice(echo.length) : said,
+      detail:
+        operation.error ??
+        translate('components.managed-runtime.failed', 'Installation failed. Try again.'),
       progress: null,
       steps: null,
       hint: sizeHint,

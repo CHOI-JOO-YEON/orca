@@ -1,5 +1,9 @@
 import { translate } from '@/i18n/i18n'
 import {
+  managedRuntimeInstallCard,
+  type ManagedRuntimeInstallLayout
+} from '@/components/managed-runtime/managed-runtime-install-card'
+import {
   useManagedRuntimeInstall,
   type ManagedRuntimeInstallObservation
 } from '@/runtime/use-managed-runtime-install'
@@ -16,8 +20,7 @@ export type NativeChatInstallSlotState =
       kind: 'install'
       observation: Extract<ManagedRuntimeInstallObservation, { kind: 'active' }>
       state: ManagedRuntimeInstallState
-      /** The chat has messages: Install is a strip above the composer, not the pane's message. */
-      hasHistory: boolean
+      layout: ManagedRuntimeInstallLayout
     }
 
 export type NativeChatInstallSlotInstall = Extract<NativeChatInstallSlotState, { kind: 'install' }>
@@ -32,7 +35,7 @@ const RESERVED: NativeChatInstallSlotState = { kind: 'reserved' }
 export function useNativeChatInstallSlot(
   props: Pick<NativeChatStructuredViewProps, 'target' | 'agent' | 'isVisible'>,
   agentLabel: string,
-  hasHistory: boolean
+  layout: ManagedRuntimeInstallLayout
 ): {
   slot: NativeChatInstallSlotState
   sendBlockedReason: string | null
@@ -40,15 +43,11 @@ export function useNativeChatInstallSlot(
 } {
   const slot = installSlotState(
     useManagedRuntimeInstall(props.target, props.agent, props.isVisible),
-    hasHistory
+    layout
   )
   const unavailableHint =
     slot.kind === 'install'
-      ? translate(
-          'components.managed-runtime.installTitle',
-          'Install {{agent}} to start chatting',
-          { agent: agentLabel }
-        )
+      ? managedRuntimeInstallCard(slot.state, agentLabel, slot.layout).title
       : undefined
   return {
     slot,
@@ -59,7 +58,7 @@ export function useNativeChatInstallSlot(
 
 function installSlotState(
   observation: ManagedRuntimeInstallObservation,
-  hasHistory: boolean
+  layout: ManagedRuntimeInstallLayout
 ): NativeChatInstallSlotState {
   if (observation.kind === 'inactive') {
     return NONE
@@ -75,7 +74,7 @@ function installSlotState(
     return RESERVED
   }
   return snapshot.state.source === null
-    ? { kind: 'install', observation, state: snapshot.state, hasHistory }
+    ? { kind: 'install', observation, state: snapshot.state, layout }
     : NONE
 }
 
@@ -93,13 +92,13 @@ function installSlotSendBlockedReason(
       )
 }
 
-/** The strip above the composer for a chat that already has messages. */
+/** Setup stays reachable whenever the empty pane is not showing the hero. */
 export function NativeChatInstallSlot(props: {
   slot: NativeChatInstallSlotState
   agentLabel: string
 }): React.JSX.Element | null {
   const { slot } = props
-  if (slot.kind !== 'install' || !slot.hasHistory) {
+  if (slot.kind !== 'install' || slot.layout !== 'strip') {
     return null
   }
   return (

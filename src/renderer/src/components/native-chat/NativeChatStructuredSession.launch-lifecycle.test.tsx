@@ -120,6 +120,21 @@ describe('NativeChatStructuredSession launch lifecycle', () => {
     expect(screen.getByTestId('structured-composer')).toBeTruthy()
     expect(mocks.composerProps?.unavailableHint).toBe('Install Codex to start chatting')
 
+    for (const lifecycle of ['pending', 'failed'] as const) {
+      mocks.launchLifecycle = lifecycle
+      mocks.launchResumes = true
+      rerender(<div key={lifecycle}>{sessionView()}</div>)
+      expect(screen.getAllByRole('button', { name: 'Install' })).toHaveLength(1)
+      expect(mocks.composerProps?.unavailableHint).toBe('Install Codex to continue')
+      expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull()
+    }
+    mocks.launchLifecycle = null
+    hostSays({ ...notInstalled, available: false })
+    rerender(sessionView())
+    expect(mocks.composerProps?.unavailableHint).toBe('Codex is not available on this host.')
+    expect(screen.queryByRole('button', { name: /^Install/ })).toBeNull()
+    hostSays(notInstalled)
+
     // With messages, Install is a strip above the composer instead.
     mocks.messages = null
     rerender(sessionView())
