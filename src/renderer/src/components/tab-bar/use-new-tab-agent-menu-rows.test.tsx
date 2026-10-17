@@ -11,11 +11,11 @@ import {
   STRUCTURED_AGENT_SESSION_CLIENT_LAUNCH_MODE_CAPABILITY as CLIENT,
   STRUCTURED_AGENT_SESSION_REGISTERED_AGENTS_RUNTIME_CAPABILITY as CATALOG
 } from '../../../../shared/protocol-version'
-const mocks = vi.hoisted(() => ({
-  support: vi.fn(),
-  availability: null as HostStructuredAgentAvailability | null,
-  owners: [] as unknown[]
-}))
+const mocks = vi.hoisted<{
+  support: ReturnType<typeof vi.fn>
+  availability: HostStructuredAgentAvailability | null
+  owners: unknown[]
+}>(() => ({ support: vi.fn(), availability: null, owners: [] }))
 vi.mock('@/runtime/use-host-structured-agent-availability', () => ({
   useHostStructuredAgentAvailability: (owner: unknown) => {
     mocks.owners.push(owner)
