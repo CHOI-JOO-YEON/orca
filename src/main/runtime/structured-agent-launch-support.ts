@@ -27,8 +27,10 @@ export const STRUCTURED_AGENT_LAUNCH_SETTINGS = [
   'agentCmdOverrides',
   'agentDefaultEnv',
   'nativeChatInheritShellEnvironment',
-  'nativeChatShellEnvironmentVariables'
-] as const satisfies readonly (keyof LaunchEnvironmentSettings)[]
+  'nativeChatShellEnvironmentVariables',
+  // Decides whether a workspace's chat runs natively or in WSL.
+  'localWindowsRuntimeDefault'
+] as const satisfies readonly (keyof GlobalSettings)[]
 
 /** What the check reads from the runtime asking it. */
 type LaunchSupportRuntime = {
@@ -42,7 +44,8 @@ type LaunchSupportRuntime = {
 export async function structuredAgentSupportsLaunch(
   agent: string,
   worktreeSelector: string,
-  runtime: LaunchSupportRuntime
+  runtime: LaunchSupportRuntime,
+  refreshShellOnMiss = true
 ): Promise<boolean> {
   const check = structuredAgentRuntimeMetadata(agent)?.launchCheck
   if (!check) {
@@ -64,7 +67,7 @@ export async function structuredAgentSupportsLaunch(
           await resolveHostStructuredAgentLaunchEnvironment(agent, settings),
           settings
         ),
-      refreshHostAgentBaseEnvironmentAfterMiss,
+      refreshShellOnMiss ? refreshHostAgentBaseEnvironmentAfterMiss : undefined,
       { env: ({ env }) => env, cwd }
     )
   } catch (error) {
@@ -96,13 +99,20 @@ export async function resolveHostStructuredAgentCreateSupport(input: {
   worktreeSelector: string
   location: AgentSessionExecutionLocation
   runtime: LaunchSupportRuntime
+  /** False for display reads: only a launch pays for a fresh login shell on a missing program. */
+  refreshShellOnMiss?: boolean
 }): Promise<StructuredAgentSessionCreateSupport> {
   const { agent, location } = input
   const supportsLocation =
     structuredAgentRuntimeMetadata(agent)?.supportsLocation(location) ?? false
   const supportsLaunch =
     supportsLocation &&
-    (await structuredAgentSupportsLaunch(agent, input.worktreeSelector, input.runtime))
+    (await structuredAgentSupportsLaunch(
+      agent,
+      input.worktreeSelector,
+      input.runtime,
+      input.refreshShellOnMiss ?? true
+    ))
   const support = resolveStructuredAgentSessionCreateSupport({
     location,
     adapterSupportsCreate: supportsLaunch

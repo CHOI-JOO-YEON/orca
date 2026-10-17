@@ -112,9 +112,18 @@ class OrcaRuntimeService extends OrcaRuntimeWithMigrationCatalog {
   ): () => void {
     this.structuredAgentAvailability ??= installStructuredAgentAvailability(
       this.store,
-      (worktree, agent) => this.getStructuredAgentSessionCreateSupport(worktree, agent)
+      (worktree, agent) =>
+        this.getStructuredAgentSessionCreateSupport(worktree, agent, { refreshShellOnMiss: false })
     )
     return this.structuredAgentAvailability.subscribe(worktreeSelector, read)
+  }
+
+  protected override notifyReposChanged(): void {
+    super.notifyReposChanged()
+    // Why Windows only: a project's WSL runtime choice is the repo setting a chat's location reads.
+    if (process.platform === 'win32') {
+      this.structuredAgentAvailability?.rederive()
+    }
   }
 
   /** Whether a window owns the layout and can show a launch's tab ahead of its process. */

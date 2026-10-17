@@ -88,7 +88,10 @@ export function createStructuredAgentAvailability(deps: {
     rederive: () => rederive(),
     /** A workspace appeared: one that could not be resolved before may answer now. */
     rederiveUnanswered: () =>
-      rederive((workspace) => workspace.latest?.some(({ state }) => state === 'unknown') === true)
+      rederive(
+        (workspace) =>
+          !workspace.latest || workspace.latest.some(({ state }) => state === 'unknown')
+      )
   }
 }
 

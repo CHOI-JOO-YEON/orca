@@ -178,11 +178,13 @@ export function useNewTabAgentMenuRows(
   const chatEnabled = isNativeChatEnabled(settings)
   // Why a branch: a host publishing availability answers every agent at once from its own stream;
   // an older host keeps the per-agent createSupport reads below, unchanged.
+  const publishing = input.hostCapabilities?.includes(AVAILABILITY) === true
   const published =
-    Boolean(structuredAgentSessionTargetForHost(facts.executionHostId)) &&
-    input.hostCapabilities?.includes(AVAILABILITY) === true
+    Boolean(structuredAgentSessionTargetForHost(facts.executionHostId)) && publishing
+  // Why: hidden worktrees stay mounted, so only the shown one holds its host's checks.
+  const worktreeShown = useAppStore((state) => state.activeWorktreeId === worktreeId)
   const availability = useHostStructuredAgentAvailability(
-    published
+    published && chatEnabled && (worktreeShown || open)
       ? {
           executionHostId: facts.executionHostId,
           runtimeId:

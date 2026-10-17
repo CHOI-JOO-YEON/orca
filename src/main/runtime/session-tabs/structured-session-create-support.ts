@@ -39,13 +39,15 @@ export abstract class OrcaRuntimeWithGetStructuredAgentSessionCreateSupport exte
 
   async getStructuredAgentSessionCreateSupport(
     worktreeSelector: string,
-    agent: StructuredAgentId
+    agent: StructuredAgentId,
+    options: { refreshShellOnMiss?: boolean } = {}
   ): Promise<{ supported: boolean; reason?: 'agent' | 'remote' | 'wsl' }> {
     return resolveHostStructuredAgentCreateSupport({
       agent,
       worktreeSelector,
       location: await this.resolveStructuredAgentSessionLocation(worktreeSelector),
-      runtime: this
+      runtime: this,
+      refreshShellOnMiss: options.refreshShellOnMiss
     })
   }
 
