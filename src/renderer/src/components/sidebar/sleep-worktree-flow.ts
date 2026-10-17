@@ -150,7 +150,7 @@ export async function runSleepWorktrees(
   if (errors.length > 0) {
     // Why: callers are fire-and-forget; surface actionable teardown failures after restoring retryable UI state.
     toast.error(
-      results.length === 1
+      targets.length === 1
         ? translate(
             'auto.components.sidebar.sleep.worktree.flow.8bc3fc0671',
             'Failed to sleep workspace'
