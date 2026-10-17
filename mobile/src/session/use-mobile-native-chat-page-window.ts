@@ -151,7 +151,8 @@ export function useMobileNativeChatPageWindow(args: {
   const takeAnchor = useCallback(
     (s: MobileNativeChatWindowScroller) => {
       const at = drawn.current
-      drawnRows.takeAnchor(s, at?.keys ?? [], at?.start ?? 0, at?.end ?? 0)
+      // A following reader is held by the end pin: the row's own top is enough there.
+      drawnRows.takeAnchor(s, at?.keys ?? [], [at?.start ?? 0, at?.end ?? 0], !at?.following)
     },
     [drawnRows]
   )
