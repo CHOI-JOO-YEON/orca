@@ -63,4 +63,4 @@ export const STRUCTURED_AGENT_SESSION_AGENTS_METHODS = [
       })
     }
   })
-]
+] as const

@@ -62,6 +62,6 @@ it('answers again on a launch setting change or agent refresh, and owes nothing 
   refreshed.forEach((listener) => listener())
   await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(3))
   release()
-  change({ agentDefaultEnv: { PATH: '/opt/bin' } })
+  change({ agentDefaultEnv: { pi: { PATH: '/opt/bin' } } })
   expect(support).toHaveBeenCalledTimes(perGeneration * 3)
 })
