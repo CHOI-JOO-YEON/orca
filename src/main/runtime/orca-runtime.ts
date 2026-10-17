@@ -31,6 +31,11 @@ import type { LayoutApplyReply } from '../../shared/workspace-layout/workspace-l
 import { rekeyMovedPaneOwners } from './moved-pane-owner-rekey'
 import { applyWindowLayoutCommand, type WindowLayoutCommand } from './runtime-layout-apply'
 import type { TerminalCreateOptions } from './runtime-terminal-contracts'
+import {
+  installStructuredAgentAvailability,
+  type StructuredAgentAvailability,
+  type StructuredAgentAvailabilityReader
+} from './structured-agent-availability'
 
 // oxlint-disable-next-line typescript/no-unsafe-declaration-merging -- SAFETY: The existing Linear installer supplies the canonical prototype surface.
 class OrcaRuntimeService extends OrcaRuntimeWithMigrationCatalog {
@@ -95,6 +100,21 @@ class OrcaRuntimeService extends OrcaRuntimeWithMigrationCatalog {
     registerDetectedWorktreeScanInvalidation()
     registerWorktreeChangeInvalidator((repoId) => this.invalidateWorktreeCatalog(repoId))
     publishWorkspaceViewChanges(this.store, (event) => this.emitClientEvent(event))
+  }
+
+  private structuredAgentAvailability: StructuredAgentAvailability | undefined
+
+  /** Every registered agent's createSupport answer in this workspace, shared by all its readers and
+   *  published as complete generations; returns the release. */
+  subscribeStructuredAgentAvailability(
+    worktreeSelector: string,
+    read: StructuredAgentAvailabilityReader
+  ): () => void {
+    this.structuredAgentAvailability ??= installStructuredAgentAvailability(
+      this.store,
+      (worktree, agent) => this.getStructuredAgentSessionCreateSupport(worktree, agent)
+    )
+    return this.structuredAgentAvailability.subscribe(worktreeSelector, read)
   }
 
   /** Whether a window owns the layout and can show a launch's tab ahead of its process. */

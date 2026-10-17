@@ -22,6 +22,14 @@ type LaunchEnvironmentSettings = Pick<
 > &
   Partial<Pick<GlobalSettings, 'agentCmdOverrides'>>
 
+/** Every setting the check reads, so a change to any of them can change its answer. */
+export const STRUCTURED_AGENT_LAUNCH_SETTINGS = [
+  'agentCmdOverrides',
+  'agentDefaultEnv',
+  'nativeChatInheritShellEnvironment',
+  'nativeChatShellEnvironmentVariables'
+] as const satisfies readonly (keyof LaunchEnvironmentSettings)[]
+
 /** What the check reads from the runtime asking it. */
 type LaunchSupportRuntime = {
   requireStore(): { getSettings(): LaunchEnvironmentSettings }
