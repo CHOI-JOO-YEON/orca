@@ -51,7 +51,6 @@ export type PiRpcSessionDeps = {
     fence: number
     outcome: AgentSessionDispatchOutcome
   }) => void
-  onIdle: (input: { sessionId: string }) => void
   logger: StructuredAgentSessionLogger
 }
 
@@ -62,6 +61,8 @@ export class PiRpcSession {
   readonly turns: PiRpcTurns
   readonly dialogs: PiRpcDialogCallbacks
   readonly selected = new Map<string, string>()
+  /** The sends this child holds: each from its handover until its settlement. */
+  readonly heldSends = new Set<string>()
   private startCatalogListing?: AgentModelCatalogLiveListing
   readonly skipped: string[] = []
   commands?: AgentSessionSlashCommand[]
@@ -105,10 +106,7 @@ export class PiRpcSession {
       send: (frame) => this.connection.send(frame),
       request: (command, params, options) => this.connection.request(command, params, options),
       settled: (id, outcome) => this.settle(id, outcome),
-      idle: () => {
-        this.dialogs.cancelAll()
-        deps.onIdle({ sessionId: input.identity.sessionId })
-      },
+      idle: () => this.dialogs.cancelAll(),
       failed: (error) => this.fail(error),
       diagnostic: (error) =>
         deps.logger.warn('Pi context usage could not be read', {
@@ -145,6 +143,21 @@ export class PiRpcSession {
           .finally(() => this.releaseAfterExit?.())
       }
     })
+  }
+
+  async submit(...args: Parameters<PiRpcTurns['submit']>): ReturnType<PiRpcTurns['submit']> {
+    const [clientMessageId] = args
+    this.heldSends.add(clientMessageId)
+    let outcome: AgentSessionDispatchOutcome | undefined
+    try {
+      outcome = await this.turns.submit(...args)
+      return outcome
+    } finally {
+      // Admitted, it stays held until its settlement; anything else was answered here.
+      if (outcome?.state !== 'admitted') {
+        this.heldSends.delete(clientMessageId)
+      }
+    }
   }
 
   async start(): Promise<string> {
@@ -293,6 +306,7 @@ export class PiRpcSession {
   }
 
   private settle(clientMessageId: string, outcome: AgentSessionDispatchOutcome): void {
+    this.heldSends.delete(clientMessageId)
     this.deps.onSettled({
       sessionId: this.input.identity.sessionId,
       clientMessageId,
