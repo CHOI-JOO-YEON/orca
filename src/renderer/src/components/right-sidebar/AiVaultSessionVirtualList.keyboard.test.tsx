@@ -5,6 +5,7 @@ import { createRef, type KeyboardEvent } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAppStore } from '@/store'
 import type { StructuredAgentLaunchSettlement } from '@/lib/structured-agent-launch-settlement'
+import type { AgentSessionLaunchVerdict } from '@/lib/agent-session-launch-plan'
 import type { AiVaultSession } from '../../../../shared/ai-vault-types'
 import { LOCAL_EXECUTION_HOST_ID } from '../../../../shared/execution-host'
 import {
@@ -32,7 +33,7 @@ vi.mock('@/lib/ai-vault-session-resume-preparation', () => ({
 }))
 vi.mock('@/lib/agent-session-launch-plan', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
-  adoptAgentSessionLaunchVerdict: (verdict: object) => ({
+  adoptAgentSessionLaunchVerdict: (verdict: AgentSessionLaunchVerdict) => ({
     ...verdict,
     begin: () => ({
       sessionId: 'new',
