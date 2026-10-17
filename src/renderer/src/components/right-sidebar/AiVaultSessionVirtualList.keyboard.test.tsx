@@ -54,7 +54,9 @@ vi.mock('@/lib/structured-agent-session-launch-admission', async (importOriginal
   })
 }))
 // What the host reports for each chat; an untouched one has no message yet.
-const hostStatus = vi.hoisted(() => new Map<string, { status: null }>())
+const hostStatus = vi.hoisted(
+  () => new Map<string, { status: null; providerSession?: { id: string } }>()
+)
 vi.mock('@/runtime/structured-agent-session-status-feed', () => ({
   getStructuredAgentSessionStatusFeed: () => ({
     getSnapshot: () => hostStatus,
@@ -182,6 +184,7 @@ function selectedTitle(): string | null {
 }
 
 beforeEach(() => {
+  hostStatus.clear()
   // Why: happy-dom has no layout; give the virtualizer a bounded viewport and fixed rows.
   vi.stubGlobal('ResizeObserver', NoopResizeObserver)
   vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockImplementation(function (
@@ -295,5 +298,27 @@ describe('Session History keyboard selection', () => {
     hostStatus.set('old', { status: null })
     await pickFirstRow({ kind: 'structured', sessionId: 'new' })
     expect(order()).toEqual([resumed, 'other'])
+  })
+
+  it("closes the picker for this chat's own conversation even when its row predates the takeover", async () => {
+    const workspaceId = 'repo-1::/repo'
+    useAppStore.setState(useAppStore.getInitialState(), true)
+    useAppStore.getState().createUnifiedTab(workspaceId, 'agent-session', {
+      id: 'old',
+      entityId: 'old',
+      executionHostId: LOCAL_EXECUTION_HOST_ID,
+      agentSessionAgent: 'claude'
+    })
+    hostStatus.set('old', { status: null, providerSession: { id: sessions[0].sessionId } })
+    const dismiss = vi.fn()
+    const { press } = renderList({
+      resumeHere: { tabId: 'old', workspaceId, agent: 'claude', dismiss }
+    })
+    press('Enter')
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+    expect(dismiss).toHaveBeenCalledOnce()
+    expect(useAppStore.getState().groupsByWorktree[workspaceId]?.[0]?.tabOrder).toEqual(['old'])
   })
 })

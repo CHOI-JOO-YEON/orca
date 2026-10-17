@@ -79,7 +79,6 @@ export function SessionInlineDetails({
     (!resumeActions.worktree.worktreeId || Boolean(resumeActions.newTab.worktreeId))
   const promptPreview = sessionPromptPreview(session)
   const detailTurns = sessionDetailConversationTurns(session, 3)
-  const worktreeDisplay = worktreeInfo
 
   return (
     <div
@@ -228,7 +227,12 @@ export function SessionInlineDetails({
       <div className="space-y-3 p-3">
         {hasResumableContent ? (
           <>
-            <FirstPromptCard key={session.id} session={session} preview={promptPreview} />
+            <FirstPromptCard
+              key={session.id}
+              session={session}
+              preview={promptPreview}
+              copyHidden={actionsHidden}
+            />
             <SessionReceiptSection
               icon={<MessageSquare className="size-3" />}
               label={translate(
@@ -264,20 +268,18 @@ export function SessionInlineDetails({
 
         <SessionSubagentsSection session={session} resume={subagentResume} />
 
-        {shouldShowAiVaultSessionWorktreeLine(worktreeDisplay, {
-          vaultScope
-        }) ? (
+        {shouldShowAiVaultSessionWorktreeLine(worktreeInfo, { vaultScope }) ? (
           <SessionReceiptSection
             icon={
-              isAiVaultFolderWorkspaceId(worktreeDisplay.worktreeId) ? (
+              isAiVaultFolderWorkspaceId(worktreeInfo.worktreeId) ? (
                 <Folder className="size-3" />
               ) : (
                 <FolderGit2 className="size-3" />
               )
             }
-            label={aiVaultSessionWorkspaceHeading(worktreeDisplay.worktreeId)}
+            label={aiVaultSessionWorkspaceHeading(worktreeInfo.worktreeId)}
           >
-            <WorktreeMetadataLines worktreeInfo={worktreeDisplay} vaultScope={vaultScope} />
+            <WorktreeMetadataLines worktreeInfo={worktreeInfo} vaultScope={vaultScope} />
           </SessionReceiptSection>
         ) : null}
       </div>

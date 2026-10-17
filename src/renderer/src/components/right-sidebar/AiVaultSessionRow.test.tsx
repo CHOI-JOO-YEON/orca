@@ -178,6 +178,7 @@ describe('VaultSessionRow in the /resume picker', () => {
 
     expect(await screen.findByText('Sub task')).toBeTruthy()
     expect(screen.queryByTitle('View Log')).toBeNull()
+    expect(screen.queryByRole('button', { name: /^Copy/ })).toBeNull()
     expect(screen.queryByTestId('ai-vault-session-more-actions')).toBeNull()
     expect(screen.queryByRole('button', { name: 'Resume in New Tab' })).toBeNull()
     expect(container.querySelector('[draggable="true"]')).toBeNull()

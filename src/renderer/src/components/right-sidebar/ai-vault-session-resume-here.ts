@@ -10,7 +10,10 @@ import {
 import { adoptsCliConversations } from '../../../../shared/structured-agent-cli-conversation-adoption'
 import { structuredAgentSessionPaneKey } from '../../../../shared/structured-agent-session-projection'
 import type { Tab } from '../../../../shared/tab-types'
-import { getStructuredAgentSessionLaunchLifecycle } from '@/lib/structured-agent-session-launch-registry'
+import {
+  getStructuredAgentSessionLaunchLifecycle,
+  getStructuredLaunchStateBySessionId
+} from '@/lib/structured-agent-session-launch-registry'
 import { structuredAgentSessionTargetForHost } from '@/runtime/structured-agent-session-owner'
 import { getStructuredAgentSessionStatusFeed } from '@/runtime/structured-agent-session-status-feed'
 import type { AiVaultSessionRowChatActions } from './ai-vault-session-chat-action'
@@ -46,7 +49,10 @@ export function resumeAiVaultSessionHere(args: {
 }): false | Promise<void> {
   const { session, here, actions } = args
   const structured = session.structuredSession
-  if (structured && structured.sessionId === findChatTab(here)?.entityId) {
+  // A row listed before its chat took the conversation over lacks the link; that chat's record has it.
+  const holder = structured ? undefined : findChatHolding(session.sessionId)
+  const ownerId = structured?.sessionId ?? holder?.entityId
+  if (ownerId !== undefined && ownerId === findChatTab(here)?.entityId) {
     here.dismiss()
     return Promise.resolve()
   }
@@ -54,6 +60,10 @@ export function resumeAiVaultSessionHere(args: {
   if (actions.canJumpToOriginalPane) {
     args.jump(session)
     return Promise.resolve()
+  }
+  if (holder) {
+    const owner = { sessionId: holder.entityId, workspaceId: holder.worktreeId }
+    return activateAiVaultStructuredSession({ structuredSession: owner }).then(() => undefined)
   }
   if (!here.agent || !aiVaultHistoryAgents(here.agent).includes(session.agent)) {
     return false
@@ -117,6 +127,31 @@ function findChatTabWhere(workspaceId: string, matches: (tab: Tab) => boolean): 
     .unifiedTabsByWorktree[workspaceId]?.find(
       (tab) => tab.contentType === 'agent-session' && matches(tab)
     )
+}
+
+/** The open chat continuing `providerSessionId`: what its host's record holds, else what it launched from. */
+function findChatHolding(providerSessionId: string): Tab | undefined {
+  for (const tabs of Object.values(useAppStore.getState().unifiedTabsByWorktree)) {
+    const holder = tabs.find(
+      (tab) => tab.contentType === 'agent-session' && chatConversationId(tab) === providerSessionId
+    )
+    if (holder) {
+      return holder
+    }
+  }
+  return undefined
+}
+
+function chatConversationId(tab: Tab): string | undefined {
+  const target = structuredAgentSessionTargetForHost(tab.executionHostId)
+  const held = target
+    ? getStructuredAgentSessionStatusFeed(target).getSnapshot().get(tab.entityId)?.providerSession
+        ?.id
+    : undefined
+  return (
+    held ??
+    getStructuredLaunchStateBySessionId(tab.entityId)?.intent.params.resumeFrom?.providerSessionId
+  )
 }
 
 function findChatTab(here: AiVaultResumeHere): Tab | undefined {
