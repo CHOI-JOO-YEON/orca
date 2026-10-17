@@ -58,7 +58,9 @@ export function useMobileNativeChatPageWindow(args: {
   const streamedAt = useRef(0)
   const onSettled = useRef(() => {})
   const [motion] = useState(() => new MobileNativeChatPageMotion(() => onSettled.current()))
-  const [anchoring] = useState(() => new MobileNativeChatPageAnchoring(scroller, isFollowing))
+  const [anchoring] = useState(
+    () => new MobileNativeChatPageAnchoring(scroller, isFollowing, motion)
+  )
   const keys = useMemo(() => rows.map(rowKeys.keyOf), [rows, rowKeys.keyOf])
   const indexOf = useMemo(() => {
     let map: Map<string, number> | undefined
@@ -177,7 +179,6 @@ export function useMobileNativeChatPageWindow(args: {
   // Owed work that can move rows above the reader, done only while settled: measure the nearest rows
   // that are unmeasured or may have changed, and give back trimmed space.
   const measureOwed = useCallback(() => {
-    anchoring.rested()
     const [at, cur] = [drawn.current, w.current]
     if (!at || !cur || at.keys.length === 0) {
       return
@@ -212,7 +213,7 @@ export function useMobileNativeChatPageWindow(args: {
       motion.quiet(MEASURE_GAP_MS)
       render()
     }
-  }, [heights, motion, render, anchoring])
+  }, [heights, motion, render])
 
   useLayoutEffect(() => {
     onSettled.current = measureOwed
@@ -231,7 +232,7 @@ export function useMobileNativeChatPageWindow(args: {
     const fresh = { keys, rows, indexOf, rowState, start, end, first, following, layoutKey }
     drawn.current = { ...fresh, sourceHead: rowKeys.sourceHead }
     settle.current = false
-    anchoring.sync()
+    anchoring.committed()
     const s = scroller()
     if (s && anchorStale.current) {
       anchorStale.current = false
@@ -258,7 +259,6 @@ export function useMobileNativeChatPageWindow(args: {
       }
       // Where the browser keeps the place, the page writes no correction to wait for.
       if (by === 'reader' || (by === 'layout' && !scrollWritesStopMomentum())) {
-        anchoring.scrolled()
         cover(s)
       }
     }

@@ -12,13 +12,13 @@ type Styled = {
  *  same move back. */
 export class MobileNativeChatPageAnchoring {
   private holds = 0
-  /** The scroll moved since the browser last chose its anchor from the rows drawn now. */
-  private moved = false
   private readonly none = scrollWritesStopMomentum()
 
   constructor(
     private readonly scroller: () => Styled | null | undefined,
-    private readonly following: () => boolean
+    private readonly following: () => boolean,
+    /** Told of the page's own scroll writes, so their events are never the reader's. */
+    private readonly motion: { wrote: (target: number) => void }
   ) {}
 
   /** The page takes the scroll for one correction, or gives it back. */
@@ -43,24 +43,28 @@ export class MobileNativeChatPageAnchoring {
     }
   }
 
-  scrolled(): void {
-    this.moved = true
-  }
-
-  /** At rest after a scroll: the browser chooses its anchor only when the scroll moves, and a scroll
-   *  that landed on a spacer (never an anchor) left it none, though rows are drawn there now. */
-  rested(): void {
+  /** After each commit. While the browser holds the place, rows new on screen can't be its anchor
+   *  until laid out, so it kept the container around them, whose top never moves. Laid out now, a
+   *  scroll makes it choose among them. */
+  committed(): void {
+    this.sync()
     const s = this.scroller()
-    if (this.moved && !this.none && s?.style?.overflowAnchor === 'auto') {
-      this.moved = false
-      this.rechoose(s)
+    if (this.none || this.holds > 0 || s?.style?.overflowAnchor !== 'auto') {
+      return
     }
+    s.getBoundingClientRect()
+    this.rechoose(s)
   }
 
-  /** A scroll makes the browser choose its anchor afresh. */
+  /** A scroll makes the browser choose its anchor afresh; at the very top it keeps none anyway. */
   private rechoose(s: Styled): void {
     const top = s.scrollTop
-    s.scrollTop = top > 0 ? top - 1 : top + 1
-    s.scrollTop = top
+    if (top < 0.5) {
+      return
+    }
+    for (const target of [top - 1, top]) {
+      this.motion.wrote(target)
+      s.scrollTop = target
+    }
   }
 }
