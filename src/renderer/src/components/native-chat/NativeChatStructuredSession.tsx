@@ -35,11 +35,7 @@ import { useNativeChatInterruptedContinuation } from './NativeChatInterruptedCon
 import { NativeChatOrcaStopContext } from './native-chat-orca-stop-context'
 import { structuredSessionNotices } from './native-chat-structured-session-notices'
 import { NativeChatPromptSlotNotices } from './NativeChatComposerNotices'
-import {
-  installSlotSendBlockedReason,
-  NativeChatInstallSlot,
-  useNativeChatInstallSlot
-} from './NativeChatInstallSlot'
+import { NativeChatInstallSlot, useNativeChatInstallSlot } from './NativeChatInstallSlot'
 import { useNativeChatComposerError } from './use-native-chat-composer-notice'
 import { useNativeChatProvisionalLaunch } from './use-native-chat-provisional-launch'
 import { useStructuredAgentSessionHostExecution } from './StructuredAgentSessionStatusBridge'
@@ -204,8 +200,8 @@ export function NativeChatStructuredSession(
   const promptsUnanswerable = pendingPromptsAllUnanswerableHere(controller.prompts)
   const composerShown = (prompt === null || promptsUnanswerable) && !readFailedFinally
   // An owned prompt keeps its card; otherwise a missing program takes the composer's place.
-  const installSlot = useNativeChatInstallSlot(props.target, props.agent, props.isVisible)
-  const composerOpen = composerShown && installSlot.kind !== 'install'
+  const install = useNativeChatInstallSlot(props.target, props.agent, props.isVisible, agentLabel)
+  const composerOpen = composerShown && install.slot.kind !== 'install'
   const approval = prompt?.body.kind === 'approval' ? chatApprovalFromJournal(prompt.body) : null
   const cancelPrompt = () => {
     if (prompt && (controller.turnId || props.agent === 'pi')) {
@@ -236,8 +232,7 @@ export function NativeChatStructuredSession(
     setOptionPickerRequest,
     onError: reportComposerError,
     onSubmitted: submits.revealLatest,
-    sendBlockedReason:
-      hostPermission.sendBlockedReason ?? installSlotSendBlockedReason(installSlot, agentLabel)
+    sendBlockedReason: hostPermission.sendBlockedReason ?? install.sendBlockedReason
   })
 
   // Said once: on the pane when the failure took it, else in the composer's notices.
@@ -259,10 +254,9 @@ export function NativeChatStructuredSession(
     failure: provisionalLaunch.failure,
     failureRows: startFailures.filter((fact) => isClaudeSignInFailureKind(fact.kind)).length
   })
-  // Nothing starts until the install lands, so a start failure's "send again" or Retry can't help;
-  // the install row says what to do.
+  // While Install shows, it says what to do; a start failure's "send again" or Retry can't help.
   const notices = structuredSessionNotices({
-    launch: installSlot.kind === 'install' ? { ...launch, lifecycle: null } : launch,
+    launch: install.slot.kind === 'install' ? { ...launch, lifecycle: null } : launch,
     agentLabel,
     sessionError,
     composerError: composerError ?? continuation.continueError,
@@ -397,7 +391,7 @@ export function NativeChatStructuredSession(
               answerInputRef={questionAnswerInputRef}
             />
           ) : null}
-          {composerShown && <NativeChatInstallSlot slot={installSlot} agentLabel={agentLabel} />}
+          {composerShown && <NativeChatInstallSlot slot={install.slot} agentLabel={agentLabel} />}
           {composerOpen ? (
             <NativeChatComposer
               ref={composerRef}

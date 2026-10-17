@@ -22,9 +22,16 @@ const RESERVED: NativeChatInstallSlotState = { kind: 'reserved' }
 export function useNativeChatInstallSlot(
   target: RuntimeClientTarget,
   agent: string,
-  shown: boolean
+  shown: boolean,
+  agentLabel: string
+): { slot: NativeChatInstallSlotState; sendBlockedReason: string | null } {
+  const slot = installSlotState(useManagedRuntimeInstall(target, agent, shown))
+  return { slot, sendBlockedReason: installSlotSendBlockedReason(slot, agentLabel) }
+}
+
+function installSlotState(
+  observation: ManagedRuntimeInstallObservation
 ): NativeChatInstallSlotState {
-  const observation = useManagedRuntimeInstall(target, agent, shown)
   if (observation.kind === 'inactive') {
     return NONE
   }
@@ -42,7 +49,7 @@ export function useNativeChatInstallSlot(
 }
 
 /** Send stays held until the host says it can run this agent. */
-export function installSlotSendBlockedReason(
+function installSlotSendBlockedReason(
   slot: NativeChatInstallSlotState,
   agentLabel: string
 ): string | null {
