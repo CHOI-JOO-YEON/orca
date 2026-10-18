@@ -24,10 +24,10 @@ type Props = {
   layoutKey?: string
   /** Whether the reader follows the end, which then owns the scroll. */
   isFollowing: () => boolean
-  /** On the page, the list makes the correction (`keepInPlace`) so none is written mid-scroll. */
+  /** On the page, the list makes the correction (`keepInPlace`), mid-scroll only for a regroup. */
   listRef: RefObject<{
     getScrollableNode: () => Scroller | null | undefined
-    keepInPlace?: (drift: number) => void
+    keepInPlace?: (drift: number, regrouped: boolean) => void
     holdPlace?: (on: boolean) => void
   } | null>
 }
@@ -173,19 +173,19 @@ export class MobileNativeChatScrollHold extends Component<Props> {
     return held
   }
 
-  componentDidUpdate(_previous: Props, _state: unknown, held: Unit[] | null): void {
+  componentDidUpdate(previous: Props, _state: unknown, held: Unit[] | null): void {
     if (!held) {
       return
     }
     try {
-      this.restore(held)
+      this.restore(held, previous.layoutKey !== this.props.layoutKey)
     } finally {
       // Whatever the correction did, the scroll goes back to its owner.
       this.props.listRef.current?.holdPlace?.(false)
     }
   }
 
-  private restore(held: Unit[]): void {
+  private restore(held: Unit[], regrouped: boolean): void {
     const list = this.props.listRef.current
     const scroller = held.length ? list?.getScrollableNode() : null
     if (!scroller) {
@@ -198,7 +198,7 @@ export class MobileNativeChatScrollHold extends Component<Props> {
         const drift = node.getBoundingClientRect().top - unit.top
         // Sub-pixel drift is layout noise; a write would stop iOS momentum for nothing.
         if (Math.abs(drift) >= 0.5 && list?.keepInPlace) {
-          list.keepInPlace(drift)
+          list.keepInPlace(drift, regrouped)
         } else if (Math.abs(drift) >= 0.5) {
           scroller.scrollTop += drift
         }

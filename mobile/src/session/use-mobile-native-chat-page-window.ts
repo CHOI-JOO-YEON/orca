@@ -311,11 +311,12 @@ export function useMobileNativeChatPageWindow(args: {
   )
 
   /** The place-hold's correction, when one may be written: on WebKit only at rest (mid-motion the
-   *  reader already saw the move, and putting it back at rest would be a second jump). */
+   *  reader already saw the move, and putting it back at rest would be a second jump), except a
+   *  regroup, which resizes drawn rows at once and nothing redoes later. */
   const keepInPlace = useCallback(
-    (drift: number) => {
+    (drift: number, regrouped: boolean) => {
       const s = scroller()
-      if (s && !drawn.current?.following && motion.mayCorrect()) {
+      if (s && !drawn.current?.following && (regrouped || motion.mayCorrect())) {
         write(s, s.scrollTop + drift)
         anchorStale.current = true
       }

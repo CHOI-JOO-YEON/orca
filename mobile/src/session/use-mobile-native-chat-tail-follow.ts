@@ -60,8 +60,8 @@ export type MobileNativeChatListHandle = {
   afterResize?: (entries: readonly ResizeObserverEntry[], pin: () => void) => void
   /** Page only: the list's rows join the one observer, so each reports its own height. */
   observeWith?: (observer: ResizeObserver | null) => void
-  /** Page only: the place-hold's correction, never written while the reader moves. */
-  keepInPlace?: (drift: number) => void
+  /** Page only: the place-hold's correction, written while the reader moves only for a regroup. */
+  keepInPlace?: (drift: number, regrouped: boolean) => void
   /** Page only: resolves once the reader stops moving the list, or the list goes away. */
   settled?: () => Promise<void>
   /** Page only: each classified move, before any resize correction or end pin. */
