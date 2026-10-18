@@ -1,4 +1,10 @@
-import { useCallback, type MutableRefObject } from 'react'
+import {
+  useCallback,
+  useRef,
+  type Dispatch,
+  type MutableRefObject,
+  type SetStateAction
+} from 'react'
 import type { RpcClient } from '../transport/rpc-client'
 import { triggerError, triggerSuccess } from '../platform/haptics'
 import { cancelMobileCommitMessage, requestMobileCommitMessage } from './mobile-commit-message-ai'
@@ -10,7 +16,7 @@ type Params = {
   mountedRef: MutableRefObject<boolean>
   busyActionRef: MutableRefObject<string | null>
   setGeneratingMessage: (next: boolean) => void
-  setCommitMessage: (next: string) => void
+  setCommitMessage: Dispatch<SetStateAction<string>>
   setActionError: (next: string | null) => void
 }
 
@@ -27,6 +33,7 @@ export function useMobileCommitMessageGeneration(params: Params) {
     setCommitMessage,
     setActionError
   } = params
+  const runRef = useRef(0)
 
   // AI-generate a commit message from the staged diff. Matches desktop: the
   // button is always available; a missing model surfaces as a toast.
@@ -34,15 +41,18 @@ export function useMobileCommitMessageGeneration(params: Params) {
     if (!client || generatingMessage || busyActionRef.current) {
       return
     }
+    runRef.current += 1
+    const run = runRef.current
     setGeneratingMessage(true)
     setActionError(null)
     try {
       const result = await requestMobileCommitMessage(client, worktreeId)
-      if (!mountedRef.current) {
+      if (!mountedRef.current || run !== runRef.current) {
         return
       }
       if (result.success) {
-        setCommitMessage(result.message)
+        // Why: same rule as desktop — text typed while the agent ran wins over the generated message.
+        setCommitMessage((current) => (current.length > 0 ? current : result.message))
         triggerSuccess()
       } else if (!result.canceled) {
         triggerError()
@@ -72,10 +82,13 @@ export function useMobileCommitMessageGeneration(params: Params) {
   ])
 
   const cancelGenerateCommitMessage = useCallback(() => {
-    if (client) {
-      void cancelMobileCommitMessage(client, worktreeId)
+    if (!client || !generatingMessage) {
+      return
     }
-  }, [client, worktreeId])
+    // Why: like desktop's canceled record — a run the host still finishes must not fill the box.
+    runRef.current += 1
+    void cancelMobileCommitMessage(client, worktreeId)
+  }, [client, generatingMessage, worktreeId])
 
   return { generateCommitMessage, cancelGenerateCommitMessage }
 }
