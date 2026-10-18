@@ -59,7 +59,7 @@ export function startLocalAiVaultScanProgress(
 ): LocalAiVaultScanProgressHandle {
   const previous = latest.get(scanKey)
   const fallback =
-    previous && previous.settledAt !== null
+    previous?.stage === 'finished'
       ? previous
       : (currentScans.get(scanKey)?.fallback ?? null)
   let current: AiVaultScanProgress = {
@@ -86,7 +86,7 @@ export function startLocalAiVaultScanProgress(
     fail: () => {
       if (currentScans.get(scanKey)?.handle === handle) {
         currentScans.delete(scanKey)
-        publish(scanKey, fallback)
+        publish(scanKey, fallback ?? { ...current, settledAt: now() })
       }
     }
   }

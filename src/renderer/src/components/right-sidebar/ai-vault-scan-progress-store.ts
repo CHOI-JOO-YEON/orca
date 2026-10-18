@@ -85,11 +85,13 @@ function useKeyProgress(
   return useSyncExternalStore(subscribe, snapshot)
 }
 
-/** Follows the request key; until that key has progress, keeps following the key shown before. */
+type ScanPresentation = { progress: AiVaultScanProgress; agents: AiVaultScanProgress['agents'] }
+
+/** Retains one rendered snapshot; only the requested key can replace its facts. */
 export function useAiVaultScanProgress(
   executionHostScope: ExecutionHostScope,
   scanKey: string
-): AiVaultScanProgress | null {
+): (ScanPresentation & { active: boolean }) | null {
   const local = executionHostScope === LOCAL_EXECUTION_HOST_ID
   const subscribe = useCallback(
     (listener: () => void) => {
@@ -102,15 +104,37 @@ export function useAiVaultScanProgress(
     },
     [local, scanKey]
   )
-  // Why: the key follows the active worktree, so dropping to nothing between keys would
-  // make the strip vanish and the list jump on every switch.
-  const [shownKey, setShownKey] = useState(scanKey)
+  const [shown, setShown] = useState<
+    (ScanPresentation & { scanKey: string; discovering: boolean }) | null
+  >(null)
   const own = useKeyProgress(subscribe, local, scanKey)
-  const shown = useKeyProgress(subscribe, local, shownKey)
-  if (own && shownKey !== scanKey) {
-    setShownKey(scanKey)
+  if (own && (own !== shown?.progress || scanKey !== shown?.scanKey)) {
+    const discovering =
+      !shown ||
+      (shown.discovering &&
+        shown.scanKey === scanKey &&
+        shown.progress.scanId === own.scanId &&
+        shown.progress.settledAt === null)
+    // Partial rosters cannot replace the displayed footprint or introduce transient empty sources.
+    const roster = shown?.agents ?? []
+    const additions = discovering
+      ? own.agents.filter((agent) => !roster.some((previous) => previous.agent === agent.agent))
+      : []
+    setShown({
+      scanKey,
+      progress: own,
+      discovering,
+      agents:
+        own.stage === 'finished'
+          ? own.agents
+          : [...roster, ...additions].map(
+              (agent) => own.agents.find((current) => current.agent === agent.agent) ?? agent
+            )
+    })
   }
-  return own ?? shown
+  return local && shown
+    ? { ...shown, active: own === shown.progress && own.settledAt === null }
+    : null
 }
 
 export function resetAiVaultScanProgressStoreForTests(): void {

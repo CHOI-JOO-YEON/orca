@@ -142,7 +142,7 @@ describe('Session History scan progress, scanner child to window', () => {
     expect(localAiVaultScanProgress('scope')).toMatchObject({ scanId: 'earlier', stage: 'finished' })
   })
 
-  it('clears the entry when an interactive timeout retires the shared scanner', async () => {
+  it('settles unfinished work when an interactive timeout retires the shared scanner', async () => {
     vi.useFakeTimers()
     const { child, client, scan } = startScan()
     const rejectedScan = scan.catch((error: Error) => error)
@@ -163,7 +163,16 @@ describe('Session History scan progress, scanner child to window', () => {
 
     expect(await rejectedInteractive).toBeInstanceOf(Error)
     expect(await rejectedScan).toBeInstanceOf(Error)
-    expect(localAiVaultScanProgress('')).toBeNull()
+    expect(localAiVaultScanProgress('')).toMatchObject({ stage: 'finding', settledAt: 5_000 })
+    const retry = startLocalAiVaultScanProgress('', 'retry', () => 6_000)
+    retry.work({ stage: 'reading', agents: [], read: { done: 1, total: 2 } })
+    retry.fail()
+    expect(localAiVaultScanProgress('')).toMatchObject({
+      scanId: 'retry',
+      stage: 'reading',
+      settledAt: 6_000,
+      read: { done: 1, total: 2 }
+    })
     client.dispose()
   })
 

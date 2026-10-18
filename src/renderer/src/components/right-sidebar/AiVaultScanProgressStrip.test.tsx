@@ -64,10 +64,11 @@ it('keeps a narrower cached panel off the broader key while a late matching pane
   const remote = renderHook(() =>
     useAiVaultScanProgress('runtime:server-1', broader)
   )
-  await waitFor(() => expect(local.result.current).toBe(cachedProgress))
+  const allHosts = renderHook(() => useAiVaultScanProgress('all', broader))
+  await waitFor(() => expect(local.result.current?.progress).toBe(cachedProgress))
   act(() => push({ scanKey: broader, progress: cachedProgress }))
 
-  expect(local.result.current).toBe(cachedProgress)
+  expect(local.result.current?.progress).toBe(cachedProgress)
   expect(narrowerPanel.result.current).toBeNull()
   act(() =>
     push({ scanKey: broader, progress: { ...cachedProgress, scanId: 'later', stage: 'finding' } })
@@ -75,9 +76,10 @@ it('keeps a narrower cached panel off the broader key while a late matching pane
   expect(narrowerPanel.result.current).toBeNull()
   // A remote host has no progress stream yet; its panel keeps today's spinner and error line.
   expect(remote.result.current).toBeNull()
+  expect(allHosts.result.current).toBeNull()
 })
 
-it('keeps the strip on screen through rescans and worktree switches', () => {
+it('keeps real rows through partial rescans, detached keys and failed retries', async () => {
   let push: (update: { scanKey: string; progress: AiVaultScanProgress | null }) => void = () =>
     undefined
   vi.stubGlobal('api', {
@@ -91,28 +93,73 @@ it('keeps the strip on screen through rescans and worktree switches', () => {
   })
   function Panel({ scanKey }: { scanKey: string }) {
     const progress = useAiVaultScanProgress('local', scanKey)
-    return progress ? <AiVaultScanProgressStrip progress={progress} /> : null
+    return progress ? <AiVaultScanProgressStrip {...progress} /> : null
   }
   const panel = render(<Panel scanKey="worktree-a" />)
   const view = within(panel.container)
+  const first: AiVaultScanProgress = {
+    ...FINISHED,
+    stage: 'finding',
+    settledAt: null,
+    agents: [FINISHED.agents[0]!]
+  }
+  act(() => push({ scanKey: 'worktree-a', progress: first }))
+  await userEvent.setup().click(view.getByRole('button'))
+  act(() => push({ scanKey: 'worktree-a', progress: { ...first, agents: [], settledAt: 1_000 } }))
+  expect(view.getByText('24,968 files')).toBeTruthy()
   act(() => push({ scanKey: 'worktree-a', progress: FINISHED }))
   expect(view.getByText('Scanned', { exact: false })).toBeTruthy()
+  const rowCount = () => panel.container.querySelectorAll('.h-7').length
+  const assertRoster = () => expect(rowCount()).toBe(3)
 
   const next = { ...FINISHED, scanId: 'scan-a-next' }
-  act(() => push({ scanKey: 'worktree-a', progress: { ...next, stage: 'reading', settledAt: null } }))
+  const partial: AiVaultScanProgress = { ...next, stage: 'reading', settledAt: null, agents: [] }
+  act(() => push({ scanKey: 'worktree-a', progress: partial }))
+  assertRoster()
+  for (const agents of [
+    [{ ...FINISHED.agents[0]!, files: 12, walking: true }],
+    [{ agent: 'cursor' as const, files: 0, databases: 0, walking: true }],
+    []
+  ]) {
+    act(() => push({ scanKey: 'worktree-a', progress: { ...partial, agents } }))
+    assertRoster()
+    expect(view.getByText('77,483 files')).toBeTruthy()
+    expect(panel.container.querySelector('.animate-spin')).toBeTruthy()
+  }
+  expect(view.getByText('12 files')).toBeTruthy()
+  expect(panel.container.querySelectorAll('.animate-spin').length).toBe(1)
   expect(view.getByText('Reading', { exact: false })).toBeTruthy()
   // Finished before the list it produced is applied: still one row, now settled.
   act(() => push({ scanKey: 'worktree-a', progress: next }))
   expect(view.getByText('Scanned', { exact: false })).toBeTruthy()
 
-  // A new key has nothing yet: the row keeps following the old key until it does.
+  // The old key is a static snapshot: neither pushes nor eviction may change it under B.
   panel.rerender(<Panel scanKey="worktree-b" />)
+  act(() => push({ scanKey: 'worktree-a', progress: partial }))
+  act(() => push({ scanKey: 'worktree-a', progress: null }))
+  act(() => {
+    for (let i = 0; i < 9; i++) push({ scanKey: `other-${i}`, progress: partial })
+  })
   expect(view.getByText('Scanned', { exact: false })).toBeTruthy()
   act(() =>
     push({
       scanKey: 'worktree-b',
-      progress: { ...FINISHED, scanId: 'scan-b', stage: 'finding', settledAt: null }
+      progress: { ...partial, scanId: 'scan-b', stage: 'finding' }
     })
   )
   expect(view.getByText('Scanning', { exact: false })).toBeTruthy()
+  assertRoster()
+  panel.rerender(<Panel scanKey="worktree-c" />)
+  expect(view.queryByText('Scanning', { exact: false })).toBeNull()
+  expect(panel.container.querySelector('.animate-spin, .lucide-check')).toBeNull()
+  for (const scanId of ['failed-first', 'failed-retry']) {
+    act(() => push({ scanKey: 'worktree-c', progress: { ...partial, scanId, settledAt: 95_000 } }))
+    assertRoster()
+    expect(view.queryByText('Scanned', { exact: false })).toBeNull()
+    expect(panel.container.querySelector('.animate-spin, .lucide-check')).toBeNull()
+  }
+  act(() =>
+    push({ scanKey: 'worktree-c', progress: { ...next, agents: [FINISHED.agents[0]!] } })
+  )
+  expect(rowCount()).toBe(1)
 })

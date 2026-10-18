@@ -265,7 +265,7 @@ export default function AiVaultPanel(): React.JSX.Element {
         onRefresh={() => (searching ? search.retry() : void refresh({ force: true }))}
       />
 
-      {stripProgress ? <AiVaultScanProgressStrip progress={stripProgress} /> : null}
+      {stripProgress ? <AiVaultScanProgressStrip {...stripProgress} /> : null}
 
       {!searching && error ? (
         <div className="border-b border-sidebar-border px-3 py-2 text-xs text-destructive">
