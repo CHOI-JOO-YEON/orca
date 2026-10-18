@@ -86,7 +86,7 @@ export function useAiVaultSessionRefresh(
   const scanResult = scan?.result ?? null
   const sessions = scanResult?.sessions ?? EMPTY_AI_VAULT_SESSIONS
   const [loading, setLoading] = useState(false)
-  const [failure, setFailure] = useState<{ scopeKey: string; message: string } | null>(null)
+  const [failure, setFailure] = useState<{ scopeKey: string; cause: string } | null>(null)
   const requestTokenRef = useRef<string>(undefined!)
   requestTokenRef.current ??= createBrowserUuid()
   const refreshIdRef = useRef(0)
@@ -102,8 +102,8 @@ export function useAiVaultSessionRefresh(
   const publicationGateRef = useRef<AiVaultSessionPublicationGate>(undefined!)
   publicationGateRef.current ??= new AiVaultSessionPublicationGate()
   const scanScopeKey = `${aiVaultSessionResultCacheKey(executionHostScope, scopePaths)}\n${sessionLimit}`
-  // Kept through rescans so a repeat failure doesn't blink, but only shown for the scope it came from.
-  const error = failure?.scopeKey === scanScopeKey ? failure.message : null
+  // Kept through rescans so a repeat failure doesn't blink; shown only for the scope that failed.
+  const error = failure?.scopeKey === scanScopeKey ? describeAiVaultScanError(failure.cause) : null
   const scopePathsRef = useRef<readonly string[]>(scopePaths)
   scopePathsRef.current = scopePaths
   const executionHostScopeRef = useRef<ExecutionHostScope>(executionHostScope)
@@ -236,10 +236,7 @@ export function useAiVaultSessionRefresh(
           refreshIdRef.current === refreshId &&
           scanKey === currentScanScopeKey()
         ) {
-          setFailure({
-            scopeKey: scanKey,
-            message: describeAiVaultScanError(err instanceof Error ? err.message : String(err))
-          })
+          setFailure({ scopeKey: scanKey, cause: err instanceof Error ? err.message : String(err) })
         }
       } finally {
         refreshInFlightRef.current = false
