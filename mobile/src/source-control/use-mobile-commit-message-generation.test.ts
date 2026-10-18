@@ -6,17 +6,20 @@ import type { MobileGenerateCommitMessageResult } from './mobile-commit-message-
 
 vi.mock('../platform/haptics', () => ({ triggerError: vi.fn(), triggerSuccess: vi.fn() }))
 const reply = vi.hoisted(() => {
-  const held: { resolve: ((result: MobileGenerateCommitMessageResult) => void) | null } = {
-    resolve: null
-  }
+  const held: {
+    resolve: ((result: MobileGenerateCommitMessageResult) => void) | null
+    reject: ((error: Error) => void) | null
+    cancel: () => Promise<void>
+  } = { resolve: null, reject: null, cancel: async () => {} }
   return held
 })
 vi.mock('./mobile-commit-message-ai', () => ({
   requestMobileCommitMessage: () =>
-    new Promise<MobileGenerateCommitMessageResult>((resolve) => {
+    new Promise<MobileGenerateCommitMessageResult>((resolve, reject) => {
       reply.resolve = resolve
+      reply.reject = reject
     }),
-  cancelMobileCommitMessage: async () => {}
+  cancelMobileCommitMessage: () => reply.cancel()
 }))
 
 import { useMobileCommitMessageGeneration } from './use-mobile-commit-message-generation'
@@ -25,16 +28,19 @@ import { useMobileCommitMessageGeneration } from './use-mobile-commit-message-ge
 const client = {} as RpcClient
 const view: {
   message: string
+  error: string | null
   type: ((next: string) => void) | null
   generate: (() => Promise<void>) | null
-} = { message: '', type: null, generate: null }
+  cancel: (() => void) | null
+} = { message: '', error: null, type: null, generate: null, cancel: null }
 
 function Harness(): null {
   const [message, setMessage] = useState('')
   const [generating, setGenerating] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const mountedRef = useRef(true)
   const busyActionRef = useRef<string | null>(null)
-  const { generateCommitMessage } = useMobileCommitMessageGeneration({
+  const { generateCommitMessage, cancelGenerateCommitMessage } = useMobileCommitMessageGeneration({
     client,
     worktreeId: 'wt-1',
     generatingMessage: generating,
@@ -42,9 +48,11 @@ function Harness(): null {
     busyActionRef,
     setGeneratingMessage: setGenerating,
     setCommitMessage: setMessage,
-    setActionError: () => {}
+    setActionError: setError
   })
   view.message = message
+  view.error = error
+  view.cancel = cancelGenerateCommitMessage
   view.type = setMessage
   view.generate = generateCommitMessage
   return null
@@ -56,6 +64,8 @@ afterEach(() => {
   act(() => renderer?.unmount())
   renderer = null
   reply.resolve = null
+  reply.reject = null
+  reply.cancel = async () => {}
 })
 
 async function generateThen(typed: string | null): Promise<void> {
@@ -84,5 +94,27 @@ describe('useMobileCommitMessageGeneration', () => {
   it('fills an empty box with the generated message', async () => {
     await generateThen(null)
     expect(view.message).toBe('feat: generated')
+  })
+
+  it('shows no error from a run that was stopped and then failed', async () => {
+    reply.cancel = () => Promise.reject(new Error('transport closed'))
+    const unhandled = vi.fn()
+    process.on('unhandledRejection', unhandled)
+    act(() => {
+      renderer = create(createElement(Harness))
+    })
+    let pending: Promise<void> | undefined
+    act(() => {
+      pending = view.generate?.()
+    })
+    act(() => view.cancel?.())
+    await act(async () => {
+      reply.reject?.(new Error('transport closed'))
+      await pending
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+    process.off('unhandledRejection', unhandled)
+    expect(view.error).toBeNull()
+    expect(unhandled).not.toHaveBeenCalled()
   })
 })

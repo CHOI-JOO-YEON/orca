@@ -21,13 +21,14 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
       }
       return store.raw
     },
-    setItem: async () => {
+    setItem: async (_key: string, value: string) => {
       store.writes += 1
       if (store.refuse) {
         throw new Error(
           'Orca could not save orca:custom-accessory-keys: a stored value may be too large.'
         )
       }
+      store.raw = value
     }
   }
 }))
@@ -201,6 +202,13 @@ describe('removing a custom key', () => {
   it('answers the stored list without the key once the store takes it', async () => {
     store.raw = JSON.stringify([kept, removed])
     await expect(removeCustomKey(removed.id)).resolves.toEqual([kept])
+  })
+
+  it('lets two removals in flight together both land', async () => {
+    const third = { id: 'custom-3', label: 'Ctrl+Z', bytes: '\u001a', enter: false }
+    store.raw = JSON.stringify([kept, removed, third])
+    await Promise.all([removeCustomKey(kept.id), removeCustomKey(removed.id)])
+    expect(JSON.parse(store.raw ?? '[]')).toEqual([third])
   })
 
   it('writes nothing when the stored list cannot be read, so a read failure erases nothing', async () => {

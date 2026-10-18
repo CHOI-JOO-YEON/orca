@@ -61,7 +61,7 @@ export function useMobileCommitMessageGeneration(params: Params) {
     } catch (err) {
       // Why: a transport drop rejects the RPC; without this the error haptic +
       // message are skipped and the rejection escapes the void-called handler.
-      if (mountedRef.current) {
+      if (mountedRef.current && run === runRef.current) {
         triggerError()
         setActionError(err instanceof Error ? err.message : 'Failed to generate commit message')
       }
@@ -87,7 +87,9 @@ export function useMobileCommitMessageGeneration(params: Params) {
     }
     // Why: like desktop's canceled record — a run the host still finishes must not fill the box.
     runRef.current += 1
-    void cancelMobileCommitMessage(client, worktreeId)
+    // Why: commit and Create PR call this without awaiting; a dropped transport must not surface
+    // as an unhandled rejection, and the run's own reply still clears the spinner.
+    cancelMobileCommitMessage(client, worktreeId).catch(() => {})
   }, [client, generatingMessage, worktreeId])
 
   return { generateCommitMessage, cancelGenerateCommitMessage }

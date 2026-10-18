@@ -87,12 +87,23 @@ export async function saveCustomKeys(keys: CustomKey[]): Promise<void> {
   await persistMirrored(CUSTOM_ACCESSORY_KEYS_STORAGE_KEY, JSON.stringify(keys))
 }
 
+// One read-modify-write at a time, so an add or a removal starts from the list the last one saved.
+let storedCustomKeysUpdate: Promise<unknown> = Promise.resolve()
+
+function updateStoredCustomKeys(change: (keys: CustomKey[]) => CustomKey[]): Promise<CustomKey[]> {
+  const run = storedCustomKeysUpdate.then(async () => {
+    const updated = change(await readStoredCustomKeys())
+    await saveCustomKeys(updated)
+    return updated
+  })
+  storedCustomKeysUpdate = run.catch(() => {})
+  return run
+}
+
 // Like addKey: resolves with the stored list only once the store took it, so a refused write
 // never drops a row from screen that the next load would bring back.
-export async function removeCustomKey(id: string): Promise<CustomKey[]> {
-  const updated = (await readStoredCustomKeys()).filter((key) => key.id !== id)
-  await saveCustomKeys(updated)
-  return updated
+export function removeCustomKey(id: string): Promise<CustomKey[]> {
+  return updateStoredCustomKeys((keys) => keys.filter((key) => key.id !== id))
 }
 
 export function CustomKeyModal({ visible, onClose, onKeysChanged, onManageShortcuts }: Props) {
@@ -129,8 +140,7 @@ export function CustomKeyModal({ visible, onClose, onKeysChanged, onManageShortc
       // handler, which reports a page fault and drops the generation for a key nobody could add.
       // Every other allowlisted writer in this closure already catches its own save.
       try {
-        updated = [...(await readStoredCustomKeys()), newKey]
-        await saveCustomKeys(updated)
+        updated = await updateStoredCustomKeys((keys) => [...keys, newKey])
       } catch (error) {
         // Neither reported nor closed: a drawer that dismissed itself and announced the key would
         // put a row on the accessory bar that no store holds and the next load would not have.

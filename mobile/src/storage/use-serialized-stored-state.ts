@@ -38,9 +38,9 @@ export function useSerializedStoredState<T>(
         )
         .then((refused) => {
           pendingWritesRef.current -= 1
-          // Why: a refused write left the store as it was; show what it holds, unless a newer
-          // write already owns the screen.
-          if (refused) {
+          // Why: a refused write left the store as it was; show what it holds. A write still
+          // queued owns the screen, and a read started now could land after it and undo it.
+          if (refused && pendingWritesRef.current === 0) {
             refresh()
           }
         })
