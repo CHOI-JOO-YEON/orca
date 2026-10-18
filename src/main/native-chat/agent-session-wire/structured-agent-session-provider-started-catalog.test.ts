@@ -148,15 +148,17 @@ it('publishes an unobserved child while cleanup is refused, then saves the same 
     const options = { turnScope: AGENT_JOURNAL_THREAD_SCOPE }
     sink.appendItem(child, subagentJournalBody(block), { ...options, executes: true })
     sink.appendItem(turn, { kind: 'turn', turnId: 'turn-f5', state: 'completed' }, options)
-    sink.appendItem(
-      { ...turn, ordinal: 3 },
-      {
-        kind: 'message',
-        role: 'assistant',
-        blocks: [{ type: 'text', text: 'Parent finished' }]
-      },
-      { ...options, agentId: block.id }
-    )
+    for (const [ordinal, agentId] of [undefined, block.id].entries()) {
+      sink.appendItem(
+        { ...turn, ordinal: ordinal + 3 },
+        {
+          kind: 'message',
+          role: 'assistant',
+          blocks: [{ type: 'text', text: 'Work finished' }]
+        },
+        { ...options, agentId }
+      )
+    }
     await host.flushStreamedEvents(SESSION)
     const fence = store.getRecord(SESSION)!.lease.runtimeFence
     const itemId = agentJournalItemKey(child)
