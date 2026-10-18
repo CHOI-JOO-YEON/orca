@@ -652,7 +652,9 @@
           "presenceProfileOverflow": "{{names}} +{{count}} autres",
           "removeProjectFailed": "Échec de la suppression du projet",
           "wslFilesystemBoundaryTitle": "Ce projet est stocké sur un lecteur Windows",
-          "wslFilesystemBoundaryDescription": "Git pour ce projet s'exécute dans {{distro}}, qui atteint les lecteurs Windows via le pont du système de fichiers WSL. Attendez-vous à ce que git soit environ 20 fois plus lent que sur une copie stockée dans {{distro}}."
+          "wslFilesystemBoundaryDescription": "Git pour ce projet s'exécute dans {{distro}}, qui atteint les lecteurs Windows via le pont du système de fichiers WSL. Attendez-vous à ce que git soit environ 20 fois plus lent que sur une copie stockée dans {{distro}}.",
+          "moveToGroupOtherHost": "Impossible de déplacer le projet dans le groupe",
+          "moveToGroupOtherHostDesc": "L’ordinateur sur lequel ce projet s’exécute n’a pas ce groupe. Un projet ne peut rejoindre que les groupes enregistrés sur son propre ordinateur."
         },
         "settings": {
           "e12dab333b": "Échec du changement de serveur",
@@ -18128,7 +18130,7 @@
         "signInThenSend": "Connectez-vous, puis renvoyez votre message.",
         "historyTooLarge": "L'historique de cette conversation est trop volumineux pour être restauré ici.",
         "managedAccountEnvOverride": "Ce lancement de Claude définit ses propres variables de connexion Anthropic. Supprimez-les pour utiliser un compte Claude géré.",
-        "accountSwitchInProgress": "Un changement de compte Claude est en cours. Réessayez une fois qu'il sera terminé.",
+        "accountSwitchInProgress": "La configuration de {{agent}} est en cours de modification sur cet hôte. Réessayez une fois l'opération terminée.",
         "managedAccountUnsupported": "Tant qu'un compte Claude est ajouté dans WSL, les chats Claude nécessitent un compte Claude Windows.",
         "launchFolderMissing": "Le dossier dans lequel ce chat s'exécutait n'existe plus. Restaurez-le pour poursuivre ce chat.",
         "historyInOtherAccount": "L'historique de ce chat se trouve dans un autre compte Claude. Revenez à ce compte pour le poursuivre.",
@@ -18315,6 +18317,8 @@
         "removeImagesToSend": "Certaines images n'ont pas pu être récupérées. Retirez-les pour envoyer.",
         "imageAttachAgainLabel": "Joindre à nouveau",
         "pastedImageNotKeptLabel": "Non conservée",
+        "imageNumber": "Image #{{number}}",
+        "imageReferenceMissing": "Image retirée",
         "imagePasteFailed": "Échec du collage de l'image.",
         "worktreeNotReady": "Worktree pas encore prêt — réessayez dans un instant.",
         "pasteUnavailable": "Impossible de coller — ce chat n'accepte pas de saisie pour le moment.",

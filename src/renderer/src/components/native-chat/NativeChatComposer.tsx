@@ -161,6 +161,7 @@ const NativeChatComposerPane = forwardRef<NativeChatComposerHandle, NativeChatCo
       attachmentScopeKey: draftScopeKey,
       allowWithoutTarget: Boolean(structuredTransport),
       acceptsImages: structuredTransport?.acceptsImages !== false,
+      imageReferences: Boolean(structuredTransport),
       caret,
       disabled,
       isComposing: imeEnterGesture.isComposing,
@@ -369,6 +370,7 @@ const NativeChatComposerPane = forwardRef<NativeChatComposerHandle, NativeChatCo
         activeSuggestion={activeSuggestion}
         notices={notices}
         imageAttachments={imageAttachments}
+        numberImages={Boolean(structuredTransport)}
         attachmentEnvironmentId={structuredTransport?.runtimeEnvironmentId ?? undefined}
         sendButtonDisabled={sendButtonDisabled}
         sendBlockedReason={sendBlockedReason}
