@@ -138,7 +138,9 @@ it('keeps real rows through partial rescans, detached keys and failed retries', 
   act(() => push({ scanKey: 'worktree-a', progress: partial }))
   act(() => push({ scanKey: 'worktree-a', progress: null }))
   act(() => {
-    for (let i = 0; i < 9; i++) push({ scanKey: `other-${i}`, progress: partial })
+    for (let i = 0; i < 9; i++) {
+      push({ scanKey: `other-${i}`, progress: partial })
+    }
   })
   expect(view.getByText('Scanned', { exact: false })).toBeTruthy()
   act(() =>
