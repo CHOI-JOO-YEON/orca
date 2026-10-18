@@ -3,7 +3,7 @@ import type { OrcaRuntimeWithRestoreStructuredAgentSessionTabsOnce as RestoreStr
 import { agentSessionRefusalError } from '../../../shared/agent-session-wire-refusals'
 import { OrcaRuntimeWithGetWorktreePs } from '../workspaces/workspace-process-listing'
 import { getStructuredAgentSessionHost } from '../../native-chat/agent-session-wire/structured-agent-session-registry'
-import * as adoption from '../structured-agent-session-create-adoption'
+import * as createAdoption from '../structured-agent-session-create-adoption'
 import { isNativeLocalLocation, LOCAL_EXECUTION_HOST_ID } from '../../../shared/execution-host'
 import { getLocalProjectWorktreeGitOptions } from '../../project-runtime-git-options'
 import type { AgentSessionAttachParams } from '../../native-chat/agent-session-wire/structured-agent-session-attach'
@@ -137,10 +137,10 @@ export abstract class OrcaRuntimeWithGetStructuredAgentSessionCreateSupport exte
   }
 
   async resolveStructuredAgentSessionCreateIntent(
-    input: adoption.StructuredAgentSessionCreateIntentInput
+    input: createAdoption.StructuredAgentSessionCreateIntentInput
   ): Promise<AgentSessionAttachParams & { hostLaunchDirectory?: string }> {
     if (input.resumeFrom) {
-      adoption.requireUnownedStructuredAgentSessionAdoption({
+      createAdoption.requireUnownedStructuredAgentSessionAdoption({
         host: getStructuredAgentSessionHost(),
         agent: input.agent,
         providerSessionId: input.resumeFrom.providerSessionId,
@@ -192,7 +192,7 @@ export abstract class OrcaRuntimeWithGetStructuredAgentSessionCreateSupport exte
   }
 
   protected async resolveStructuredAgentSessionIntent(
-    input: adoption.StructuredAgentSessionCreateIntentInput,
+    input: createAdoption.StructuredAgentSessionCreateIntentInput,
     resolveAccountHome: (context: {
       launchEnv: NodeJS.ProcessEnv
       location: {
@@ -218,7 +218,7 @@ export abstract class OrcaRuntimeWithGetStructuredAgentSessionCreateSupport exte
     const location = await this.resolveStructuredAgentSessionLocation(input.worktree)
     const definition = this.requireRegisteredStructuredAgent(input.agent)
     const host = getStructuredAgentSessionHost()
-    const committedReplay = adoption.resolveCommittedStructuredAgentSessionAdoptionIntent({
+    const committedReplay = createAdoption.resolveCommittedStructuredAgentSessionAdoptionIntent({
       host,
       ...input,
       location,
@@ -238,7 +238,7 @@ export abstract class OrcaRuntimeWithGetStructuredAgentSessionCreateSupport exte
     // the wrong home finds nothing and lands the user in a blank chat wearing the old chat's name.
     const adoption =
       resumeFrom && transcriptImport
-        ? await adoption.resolveStructuredAgentSessionAdoptionForCreate({
+        ? await createAdoption.resolveStructuredAgentSessionAdoptionForCreate({
             settings,
             agent: input.agent,
             transcriptImport,
