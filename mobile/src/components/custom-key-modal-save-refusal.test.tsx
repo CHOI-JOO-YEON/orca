@@ -4,14 +4,25 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const store = vi.hoisted(() => {
   // Annotated rather than asserted: the literal alone narrows `raw` to `null`.
-  const held: { raw: string | null; refuse: boolean } = { raw: null, refuse: false }
+  const held: { raw: string | null; refuse: boolean; failRead: boolean; writes: number } = {
+    raw: null,
+    refuse: false,
+    failRead: false,
+    writes: 0
+  }
   return held
 })
 
 vi.mock('@react-native-async-storage/async-storage', () => ({
   default: {
-    getItem: async () => store.raw,
+    getItem: async () => {
+      if (store.failRead) {
+        throw new Error('the store could not be read')
+      }
+      return store.raw
+    },
     setItem: async () => {
+      store.writes += 1
       if (store.refuse) {
         throw new Error(
           'Orca could not save orca:custom-accessory-keys: a stored value may be too large.'
@@ -52,7 +63,7 @@ vi.mock('react-native', () => ({
 vi.mock('lucide-react-native', () => ({ ChevronLeft: hosts.View }))
 vi.mock('./BottomDrawer', () => ({ BottomDrawer: hosts.View }))
 
-import { CustomKeyModal } from './CustomKeyModal'
+import { CustomKeyModal, removeCustomKey } from './CustomKeyModal'
 import { readMirroredStorage } from '../storage/mirrored-storage-keys'
 
 const CUSTOM_KEYS = 'orca:custom-accessory-keys'
@@ -110,6 +121,8 @@ function addAShortcut(renderer: ReturnType<typeof create>): void {
 beforeEach(() => {
   store.raw = null
   store.refuse = false
+  store.failRead = false
+  store.writes = 0
 })
 
 /**
@@ -172,5 +185,52 @@ describe('adding a custom key when the store refuses the write', () => {
     })
     expect(onKeysChanged).toHaveBeenCalledTimes(1)
     expect(onClose).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('removing a custom key', () => {
+  const kept = { id: 'custom-1', label: 'Ctrl+C', bytes: '\u0003', enter: false }
+  const removed = { id: 'custom-2', label: 'Ctrl+D', bytes: '\u0004', enter: false }
+
+  it('rejects when the store refuses, so a caller never drops the row', async () => {
+    store.raw = JSON.stringify([kept, removed])
+    store.refuse = true
+    await expect(removeCustomKey(removed.id)).rejects.toThrow()
+  })
+
+  it('answers the stored list without the key once the store takes it', async () => {
+    store.raw = JSON.stringify([kept, removed])
+    await expect(removeCustomKey(removed.id)).resolves.toEqual([kept])
+  })
+
+  it('writes nothing when the stored list cannot be read, so a read failure erases nothing', async () => {
+    store.raw = JSON.stringify([kept, removed])
+    store.failRead = true
+    await expect(removeCustomKey(removed.id)).rejects.toThrow()
+    expect(store.writes).toBe(0)
+  })
+})
+
+describe('adding a custom key when the stored list cannot be read', () => {
+  it('writes nothing and keeps the drawer open', async () => {
+    store.failRead = true
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const onKeysChanged = vi.fn()
+    const onClose = vi.fn()
+    let renderer: ReturnType<typeof create> | null = null
+    act(() => {
+      renderer = create(createElement(CustomKeyModal, { visible: true, onClose, onKeysChanged }))
+    })
+    if (renderer === null) {
+      throw new Error('the modal did not render')
+    }
+    addAShortcut(renderer)
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    expect(store.writes).toBe(0)
+    expect(onKeysChanged).not.toHaveBeenCalled()
+    expect(onClose).not.toHaveBeenCalled()
   })
 })
