@@ -1,5 +1,5 @@
 // Startup's background heal and each retry round: startup names only the chats its records show
-// work in, a reader's first open settles the rest, readers write nothing, a person never waits on a
+// work in; adoption recovers earlier sends and the retry settles other leftovers. A person never waits on a
 // round, and a hidden chat's surviving agent is never signalled.
 
 import { mkdtemp, rm } from 'node:fs/promises'
@@ -19,6 +19,8 @@ import {
 } from '../agent-session-journal/journal-host-database-test-support'
 import { AgentSessionJournal } from '../agent-session-journal/journal-store'
 import type { StructuredAgentSessionHost } from './structured-agent-session-host'
+import { openStructuredAgentSessionConversationJournal } from './structured-agent-session-conversation-open'
+import { hostTestMessage } from './structured-agent-session-host-test-data'
 import * as reconciliationLoad from './structured-agent-session-reconciliation-load'
 import * as reconciliationPass from './structured-agent-session-reconciliation-pass'
 import {
@@ -52,6 +54,61 @@ afterEach(async () => {
 const busy = () =>
   Object.assign(new Error('database is locked'), { errcode: 5, code: 'SQLITE_BUSY' })
 const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+
+it('History recovers earlier handed sends, including legacy rows, without touching ownership', async () => {
+  const saved = record(CHAT, false)
+  await seedTestAgentSessionRecordStore(root, {
+    records: [{ ...saved, lease: { ...saved.lease, handoffStage: 'recovering' } }]
+  })
+  store = await openTestAgentSessionRecordStore(root)
+  const { session } = await openStructuredAgentSessionConversationJournal(
+    { journalDatabase: openTestJournalHostDatabase(root) },
+    saved
+  )
+  for (const clientMessageId of ['legacy', 'handed']) {
+    await session.journal.appendSubmission({
+      clientMessageId,
+      payloadFingerprint: clientMessageId,
+      body: hostTestMessage(clientMessageId),
+      fence: 13,
+      ...(clientMessageId === 'handed' ? { handoverRecorded: true as const } : {})
+    })
+    if (clientMessageId === 'handed') {
+      await session.journal.resolveDispatch({
+        clientMessageId,
+        state: 'pending',
+        fence: 13,
+        turnScope: { kind: 'thread' }
+      })
+    }
+  }
+  await session.journal.close()
+  const stopOwnerProcess = vi.fn()
+  const probeOwner = vi.fn(async (): Promise<AgentSessionOwnerProbe> => ({ outcome: 'pid-absent' }))
+  host = openScanHost(root, store, { stopOwnerProcess, probeOwner })
+  // Isolate open preparation from the separately tested background lease reconciliation.
+  host.collaboratorsForTests().reconciliation.dispose()
+  const lease = store.getRecord(CHAT)!.lease
+  const page = await host.history({ sessionId: CHAT, direction: 'tail' })
+  expect(page.page.submissions).toMatchObject([
+    { clientMessageId: 'legacy', dispatchState: 'unknown', recovered: true },
+    { clientMessageId: 'handed', dispatchState: 'unknown', recovered: true }
+  ])
+  for (const clientMessageId of ['legacy', 'handed']) {
+    await host.settleLateDispatch({
+      sessionId: CHAT,
+      clientMessageId,
+      providerIdentity: { provider: 'claude', sessionId: `provider-${CHAT}`, uuid: clientMessageId }
+    })
+  }
+  const journal = host.collaboratorsForTests().sessions.get(CHAT)!.journal
+  expect(
+    journal.submissions().every((entry) => entry.dispatchState === 'accepted' && !entry.recovered)
+  ).toBe(true)
+  expect(store.getRecord(CHAT)!.lease).toEqual(lease)
+  expect(stopOwnerProcess).not.toHaveBeenCalled()
+  expect(probeOwner).not.toHaveBeenCalled()
+})
 
 /** Records and journals for `ids`; `alive` names chats whose agent outlived the earlier process. */
 async function seed(ids: readonly string[], alive: readonly string[] = []) {

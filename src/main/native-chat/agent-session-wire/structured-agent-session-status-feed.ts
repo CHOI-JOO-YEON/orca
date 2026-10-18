@@ -297,11 +297,23 @@ export class StructuredAgentSessionStatusFeed {
     this.publish(sessionId)
   }
 
-  /** The session's child records as views, once its parent row has landed; the one read every
-   *  surface of them shares. */
-  readChildWork(sessionId: string): AgentChildWorkView[] | undefined {
+  /** Published child views; only the row writer reads raw provider records. */
+  readChildWork(sessionId: string, raw = false): AgentChildWorkView[] | undefined {
     try {
-      return this.ownership.readChildWork(sessionId)
+      const views = this.ownership.readChildWork(sessionId)
+      const unseen = !raw && this.journalProjection(sessionId)?.unobservedChildren
+      if (!unseen) {
+        return views
+      }
+      return views?.map<AgentChildWorkView>((view) => {
+        const key = `${view.kind}:${view.providerId}`
+        const run = unseen.get(key)
+        return view.membership === 'live' &&
+          unseen.has(key) &&
+          (run === undefined || run === view.invocation.invocationId)
+          ? { ...view, state: 'unverifiable' }
+          : view
+      })
     } catch (error) {
       this.logFailure('child-work-read', 'child work read failed', sessionId, error)
       return undefined

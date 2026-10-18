@@ -19,6 +19,10 @@
 
 import { holdUnsentSends } from '../agent-session-journal/journal-unsent-send-hold'
 import {
+  earlierStructuredAgentSessionSequence,
+  markEarlierStructuredAgentSessionPending
+} from './structured-agent-session-earlier-sends'
+import {
   backgroundJournalWrites,
   backgroundStoreWrites,
   type BackgroundJournalWrites,
@@ -51,7 +55,7 @@ import {
 export type StructuredAgentSessionReconciliationPassContext = Pick<
   StructuredAgentSessionLifetimeContext,
   'deps' | 'sessions' | 'now'
->
+> & { observeExecution?: (sessionId: string) => number | null }
 
 /** What the signals left that the journal and the lease cannot tell. */
 export type StructuredAgentSessionReconciliationDebts = {
@@ -81,6 +85,10 @@ export async function runStructuredAgentSessionReconciliationPass(
   debts: StructuredAgentSessionReconciliationDebts,
   processOpened: AgentJournalCursor
 ): Promise<StructuredAgentSessionReconciliationPass> {
+  const observe = context.observeExecution
+  if (observe) {
+    session.journal.observeExecutionWith(() => observe(sessionId))
+  }
   const lease = context.deps.store.getRecord(sessionId)?.lease
   const recovering = lease?.handoffStage === 'recovering'
   const pass: StructuredAgentSessionReconciliationPass = { failed: [], wrote: false, recovering }
@@ -179,9 +187,8 @@ async function settleEarlierProcess(
     return
   }
   const fence = record.lease.runtimeFence
-  const sameEpoch = processOpened.epoch === journal.cursor().epoch
   const earlier = (sequence: number | undefined): boolean =>
-    sameEpoch && sequence !== undefined && sequence <= processOpened.sequence
+    earlierStructuredAgentSessionSequence(journal, processOpened, sequence)
   const attempt = async (step: () => Promise<unknown>): Promise<boolean> =>
     step().then(
       () => true,
@@ -194,7 +201,13 @@ async function settleEarlierProcess(
   if (!(await attempt(() => writes.journal.queuedMessages.repairAndPrune()))) {
     return
   }
-  // Before a Stop can withdraw one: a Stop never withdraws a card.
+  const marked = await attempt(() =>
+    markEarlierStructuredAgentSessionPending(journal, fence, processOpened, writes.journal)
+  )
+  if (!marked && pass.failed.some(isSqliteContentionFailure)) {
+    return
+  }
+  // Stop leaves earlier-process sends for recovery; it withdraws only current-process sends.
   let converted = false
   const held = await attempt(async () => {
     converted =

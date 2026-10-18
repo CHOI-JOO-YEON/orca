@@ -283,10 +283,11 @@ export class StructuredAgentSessionQueuedMessageDrain {
   /** Whether this card's automatic send waits for the retry's next round, or was given up on. A
    *  person's Send now waits on neither. */
   waits = (sessionId: string, messageId: string): boolean =>
-    this.deps.retry().sendWaits(sessionId) || this.abandoned.card(sessionId) === messageId
+    this.deps.retry().sendWaits(sessionId) || this.abandonedCard(sessionId) === messageId
 
   /** The card a given-up send left, which the queue shows as not sent. */
-  abandonedCard = (sessionId: string): string | undefined => this.abandoned.card(sessionId)
+  abandonedCard = (sessionId: string): string | undefined =>
+    this.abandoned.card(sessionId, this.deps.sessions.get(sessionId)?.journal)
 
   /** The retry gave up on the chat's automatic send. */
   abandon(sessionId: string): void {
@@ -421,7 +422,7 @@ export class StructuredAgentSessionQueuedMessageDrain {
       this.abandoned.mark(sessionId, next.messageId, journal)
       throw error
     }
-    this.abandoned.clear(sessionId)
+    this.abandoned.clear(sessionId, next.messageId)
     this.deps.wakeDelivery(sessionId)
     return 'done'
   }

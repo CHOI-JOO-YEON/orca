@@ -23,6 +23,7 @@ import {
   planStaleStructuredAgentSessionState,
   type StaleStructuredAgentSessionStateJournal
 } from './structured-agent-session-stale-state-settlement'
+import { journalLifecycleMutationItemId } from '../agent-session-journal/journal-row-builders'
 import type { DeadGenerationJournal } from './structured-agent-session-unfinished-work'
 import type { BackgroundSettlementWrites } from './structured-agent-session-background-writes'
 import { STALE_SESSION_ROW_PREFIX } from '../../../shared/agent-session-stop-row-identity'
@@ -72,31 +73,36 @@ export async function settleStructuredAgentSessionLeftovers(
     }
     const fence = record.lease.runtimeFence
     const { journal, sessionId } = input
-    const replaced = input.store.replacedRuntime?.(sessionId)
-    // Everything below the live generation is ended; with none live, all of it is.
-    const liveFence = structuredAgentSessionLiveFence({
-      record,
-      replaced,
-      ...(input.ended ? { ended: input.ended } : {})
-    })
-    // An exit's own account holds only until a later generation is live: its rows and sends at
-    // this fence would be that generation's. The general rule settles what the exit left instead.
-    const exit = liveFence === null && !input.proof ? input.exit : undefined
     const { proof } = input
-    const below = proof
-      ? Math.min(proof.ownerFence + 1, liveFence ?? fence + 1)
-      : exit
-        ? exit.ownerFence
-        : (liveFence ?? fence + 1)
-    const failureTextContext = structuredAgentSessionFailureWordsContext(record)
     let planned = 0
     await input.writes.appendPlannedLifecycleBatch({
-      settlementId: exit
-        ? `dead-generation:${exit.settlementId}`
-        : `${STALE_SESSION_ROW_PREFIX}${sessionId}:${fence}:${proof ? `proof-${proof.ownerFence}:` : ''}seq-${journal.cursor().sequence}`,
+      settlementId:
+        input.exit && !proof
+          ? `dead-generation:${input.exit.settlementId}`
+          : `${STALE_SESSION_ROW_PREFIX}${sessionId}:${fence}:${proof ? `proof-${proof.ownerFence}:` : ''}seq-${journal.cursor().sequence}`,
       fence,
       recovered: true,
       plan: () => {
+        const record = input.store.getRecord(sessionId)
+        if (!record || record.lease.runtimeFence !== fence) {
+          return { mutations: [], dispatches: [] }
+        }
+        const replaced = input.store.replacedRuntime?.(sessionId)
+        // Everything below the live generation is ended; with none live, all of it is.
+        const liveFence = structuredAgentSessionLiveFence({
+          record,
+          replaced,
+          ...(input.ended ? { ended: input.ended } : {})
+        })
+        // An exit's own account holds only until a later generation is live: its rows and sends at
+        // this fence would be that generation's. The general rule settles what the exit left instead.
+        const exit = liveFence === null && !input.proof ? input.exit : undefined
+        const below = proof
+          ? Math.min(proof.ownerFence + 1, liveFence ?? fence + 1)
+          : exit
+            ? exit.ownerFence
+            : (liveFence ?? fence + 1)
+        const failureTextContext = structuredAgentSessionFailureWordsContext(record)
         const exited = exit
           ? planStructuredAgentSessionDeadGeneration(
               { ...exit, journal, sessionId, fence },
@@ -111,12 +117,18 @@ export async function settleStructuredAgentSessionLeftovers(
           acquisitionGeneration: null,
           // Read with the rows: the proof the lease holds now. On an observed exit this settlement
           // runs before the release, so the exit's own account (`exit`) judges instead.
-          deathEvidence: proof ?? input.store.getRecord(sessionId)?.lease.deathEvidence ?? null,
+          deathEvidence: proof ?? record.lease.deathEvidence ?? null,
           replaced,
           failureTextContext,
           below
         })
-        const mutations = [...exited.mutations, ...stale.mutations]
+        const exitedIds = new Set(exited.mutations.map(journalLifecycleMutationItemId))
+        const mutations = [
+          ...exited.mutations,
+          ...stale.mutations.filter(
+            (entry) => !exitedIds.has(journalLifecycleMutationItemId(entry))
+          )
+        ]
         const dispatches = [
           ...exited.dispatches,
           ...stale.dispatches.filter((entry) => !settledByExit.has(entry.clientMessageId))

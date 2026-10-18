@@ -87,18 +87,11 @@ export function wireStructuredAgentSessionQueuedMessages(
     queuedMessageSend: (
       caller: StructuredAgentSessionCaller,
       params: Parameters<typeof sendQueuedStructuredAgentMessage>[2]
-    ) => {
-      // A person's Send now moves the card on: a send the drain was retrying starts fresh.
-      drain.abandoned.clear(params.envelope.sessionId)
-      return sendQueuedStructuredAgentMessage(context(), caller, params)
-    },
+    ) => sendQueuedStructuredAgentMessage(context(), caller, params),
     queuedMessageDelete: (
       caller: StructuredAgentSessionCaller,
       params: Parameters<typeof deleteQueuedStructuredAgentMessage>[2]
-    ) => {
-      drain.abandoned.clear(params.envelope.sessionId)
-      return deleteQueuedStructuredAgentMessage(context(), caller, params)
-    },
+    ) => deleteQueuedStructuredAgentMessage(context(), caller, params),
     queuedMessagesResume: (
       caller: StructuredAgentSessionCaller,
       params: Parameters<typeof resumeStructuredAgentQueue>[2]

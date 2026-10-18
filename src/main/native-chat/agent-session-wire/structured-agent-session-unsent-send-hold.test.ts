@@ -146,6 +146,7 @@ describe('a message accepted while the agent starts, then Orca stops', () => {
     async ({ restart }) => {
       const id = await acceptWhileStarting(sendRequest('hello after restart'))
       await restart()
+      expect(await rig.stop()).toMatchObject({ ok: true, value: { cancelled: false } })
 
       expect(await rig.drafts()).toEqual([{ messageId: id, ...KEPT }])
       // Nothing runs in the chat, so no paused row: it waits for the chat's next turn.
@@ -279,13 +280,25 @@ describe('the next accepted turn releases a kept card', () => {
     expect(await rig.drafts()).toEqual([])
   })
 
-  it('a Stop on the reopened chat leaves its card waiting: the open settles it before the Stop runs', async () => {
+  it('a first Stop leaves an earlier process send for recovery even before its card is saved', async () => {
     const id = await acceptWhileStarting(sendRequest('survives a stop'))
-    await rig.crashRestartHostProcess()
+    const resolve = AgentSessionJournal.prototype.resolveDispatch
+    const recovery = vi
+      .spyOn(AgentSessionJournal.prototype, 'resolveDispatch')
+      .mockImplementation(function (this: AgentSessionJournal, input, hook) {
+        return input.clientMessageId === id
+          ? Promise.reject(Object.assign(new Error('database is locked'), { errcode: 5 }))
+          : resolve.call(this, input, hook)
+      })
+    await rig.crashReloadHostProcess()
 
-    expect(await rig.stop()).toMatchObject({ ok: true })
+    expect(await rig.stop()).toMatchObject({ ok: true, value: { cancelled: false } })
+    expect(journal().submission(id)).toMatchObject({ dispatchState: 'pending' })
+    expect(rig.dispatch).not.toHaveBeenCalled()
 
-    expect(await rig.drafts()).toEqual([{ messageId: id, ...KEPT }])
+    recovery.mockRestore()
+    await observationClock.observe(2_100)
+    await eventually(async () => expect(await rig.drafts()).toEqual([{ messageId: id, ...KEPT }]))
     expect(await rig.submission(id)).toMatchObject({ dispatchState: 'rejected', ...HOST_RESTARTED })
   })
 

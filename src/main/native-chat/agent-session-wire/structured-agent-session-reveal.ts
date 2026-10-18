@@ -81,7 +81,7 @@ export function createStructuredAgentSessionHostRestore(
       options?: JournalWriteOptions
     ) => Promise<AgentSessionWireRefusal | null>
     resolveRecovery: (sessionId: string, writes: BackgroundLeaseWrites) => Promise<unknown>
-    startup: Pick<StructuredAgentSessionRetryContext, 'sessions'> & {
+    startup: Pick<StructuredAgentSessionRetryContext, 'sessions' | 'observeExecution'> & {
       tasks: Pick<StructuredAgentSessionTaskQueue, 'trackAttach' | 'busy'>
       clientDelivery: Pick<StructuredAgentSessionRetryContext, 'publishGenerationEnded'>
       queue: {
@@ -133,6 +133,7 @@ export function createStructuredAgentSessionHostRestore(
     })
   }
   const reconciliation = new StructuredAgentSessionRetry({
+    observeExecution: startup.observeExecution,
     deps,
     sessions: startup.sessions,
     now: () => deps.now?.() ?? Date.now(),

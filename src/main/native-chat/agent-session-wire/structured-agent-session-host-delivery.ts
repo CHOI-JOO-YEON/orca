@@ -50,6 +50,7 @@ export type StructuredAgentSessionConversationDelivery = {
 export function createStructuredAgentSessionConversationDelivery(input: {
   deps: StructuredAgentSessionHostDeps
   sessions: Map<string, StructuredAgentSessionHostSession>
+  prepareOpen: (sessionId: string, journal: AgentSessionJournal) => Promise<void>
   serialize: <T>(sessionId: string, task: () => Promise<T>) => Promise<T>
   trackStart: <T>(start: Promise<T>) => Promise<T>
   /** Starts a child for `startedFor`, the queued message at the head, if the session has none. */
@@ -136,8 +137,7 @@ export function createStructuredAgentSessionConversationDelivery(input: {
     sessionId: string,
     opened: OpenedStructuredAgentSessionConversation
   ): Promise<void> => {
-    // Indexing a chat writes nothing: the loop never hands over a send an earlier process left
-    // (`StructuredAgentSessionCurrentWork.handsOver`), and keeping one as a card is startup's.
+    await input.prepareOpen(sessionId, opened.session.journal)
     sessions.set(sessionId, opened.session)
     input.clientDelivery.publishRestored(sessionId)
   }

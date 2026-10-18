@@ -27,11 +27,7 @@ import type { JournalReplacementItem } from './journal-epoch-replacement'
 import { readJournalSince } from './journal-cursor'
 import type { JournalHostDatabase, JournalWriteOptions } from './journal-host-database'
 import { journalRowsAfterReader, type JournalLoad } from './journal-open'
-import {
-  markJournalPendingSubmissionsUnknown,
-  rejectJournalPendingSubmissions,
-  rejectJournalQueuedSubmissions
-} from './journal-pending-submission-recovery'
+import * as pendingRecovery from './journal-pending-submission-recovery'
 import {
   applyJournalRow,
   createJournalReducerState,
@@ -60,11 +56,7 @@ import {
   journalStopEventRowBuilder
 } from './journal-stop-and-resume-rows'
 import type { AgentJournalEpochReason, JournalRow, JournalStopEvent } from './journal-row-schema'
-import type {
-  JournalOperationReceipt,
-  JournalRowTransactionHook,
-  JournalRowWriter
-} from './journal-row-writer'
+import type * as RowWriter from './journal-row-writer'
 import type { JournalSubmissionWriter } from './journal-submission-writer'
 import type { JournalEpochController } from './journal-epoch-controller'
 import { JournalWriteQueue } from './journal-write-queue'
@@ -88,10 +80,11 @@ export class AgentSessionJournal {
 
   private state: JournalReducerState
   private openedThrough: AgentJournalCursor = { epoch: '', sequence: 0 }
+  private readExecutionObservation?: () => number | null
   private readonly reopen: QueuedMessageReopenFloor
   private onCommitted: ((rows?: readonly JournalRow[]) => void) | null = null
   private readonly queue: JournalWriteQueue
-  private readonly rowWriter: JournalRowWriter
+  private readonly rowWriter: RowWriter.JournalRowWriter
   private readonly epochController: JournalEpochController
   private readonly itemAppender: JournalItemAppender
   private readonly lifecycleBatchAppender: JournalLifecycleBatchAppender
@@ -171,6 +164,12 @@ export class AgentSessionJournal {
 
   /** Where this handle opened the journal (`wroteBeforeOpen`). */
   openedAt = (): AgentJournalCursor => this.openedThrough
+
+  observeExecutionWith(read: () => number | null): void {
+    this.readExecutionObservation = read
+  }
+
+  observedExecution = (): number | null | undefined => this.readExecutionObservation?.()
 
   /** Where the reopen's pause begins while no mark holds it: where this handle's mark would go.
    *  Null once a mark is written. Per handle, so the next open derives it again. */
@@ -301,7 +300,7 @@ export class AgentSessionJournal {
     identity: AgentJournalItemIdentity,
     body: AgentJournalItemBody,
     options: JournalItemAppendOptions,
-    receipt?: JournalOperationReceipt
+    receipt?: RowWriter.JournalOperationReceipt
   ): Promise<JournalAppendResult> {
     return this.itemAppender.append(identity, body, options, receipt)
   }
@@ -324,7 +323,10 @@ export class AgentSessionJournal {
   }
 
   /** A person's Resume of the queue. */
-  appendQueueResume(fence: number, receipt?: JournalOperationReceipt): Promise<AgentJournalCursor> {
+  appendQueueResume(
+    fence: number,
+    receipt?: RowWriter.JournalOperationReceipt
+  ): Promise<AgentJournalCursor> {
     const build = journalQueueResumeRowBuilder(() => this.state, fence)
     return this.rowWriter.append(build, undefined, receipt)
   }
@@ -357,7 +359,7 @@ export class AgentSessionJournal {
   appendSubmission(
     input: JournalSubmissionInput,
     consume?: JournalSubmissionConsume,
-    receipt?: JournalOperationReceipt
+    receipt?: RowWriter.JournalOperationReceipt
   ): Promise<AgentJournalCursor> {
     return this.submissionWriter.append(input, consume, receipt)
   }
@@ -365,14 +367,14 @@ export class AgentSessionJournal {
   /** A dispatch transition (`JournalSubmissionWriter.resolveDispatch`). */
   resolveDispatch(
     input: ResolveDispatchInput,
-    hook?: JournalRowTransactionHook
+    hook?: RowWriter.JournalRowTransactionHook
   ): Promise<AgentJournalCursor> {
     return this.submissionWriter.resolveDispatch(input, hook)
   }
 
   /** Retire unanswered sends after their execution owner ended, without assuming delivery. */
   async markPendingSubmissionsUnknown(fence: number, reason?: string): Promise<string[]> {
-    return markJournalPendingSubmissionsUnknown(this, fence, reason)
+    return pendingRecovery.markJournalPendingSubmissionsUnknown(this, fence, reason)
   }
 
   /** Reject sends a child that ended in its start was handed and never echoed: none ran. */
@@ -380,7 +382,7 @@ export class AgentSessionJournal {
     fence: number,
     rejection: AgentJournalDispatchRejection
   ): Promise<string[]> {
-    return rejectJournalPendingSubmissions(this, fence, rejection)
+    return pendingRecovery.rejectJournalPendingSubmissions(this, fence, rejection)
   }
 
   /** Reject sends accepted but never handed over, optionally only those `which` names. */
@@ -388,7 +390,8 @@ export class AgentSessionJournal {
     fence: number,
     rejection: AgentJournalDispatchRejection,
     which?: (submission: AgentJournalSubmission) => boolean
-  ): Promise<string[]> => rejectJournalQueuedSubmissions(this, fence, rejection, which)
+  ): Promise<string[]> =>
+    pendingRecovery.rejectJournalQueuedSubmissions(this, fence, rejection, which)
 
   /** The escape hatch for a forked handle and an unreadable schema. It invalidates every cursor;
    *  clients reload. */

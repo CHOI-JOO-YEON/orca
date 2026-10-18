@@ -5,7 +5,7 @@
 // (`reconcileOwed`), then per owed chat, one at a time in its lane, (b) release repair, (c)
 // settlement (`runStructuredAgentSessionReconciliationPass`), (d) the queue's next send. A closed
 // chat is replayed one at a time, outside its lane.
-// Every write is background: a lock fails it at once and stops the round.
+// Retry writes are background; foreground adoption separately prepares earlier sends before publication.
 // One wake (`wake`): marking a chat owed or any commit runs a round now unless one runs or the timer
 // waits; a commit after a lock refused the last round ends that wait. The timer is the backoff
 // after a refused round (1 s to 2 s), or its first step after a busy lane. One budget: about 3
@@ -17,6 +17,7 @@ import type { AgentSessionGenerationEnd } from '../../runtime/agent-session-gene
 import { setImmediate as yieldToEvents } from 'node:timers/promises'
 import type { AgentJournalCursor } from '../../../shared/agent-session-journal-types'
 import type { AgentSessionJournal } from '../agent-session-journal/journal-store'
+import { prepareStructuredAgentSessionOpen } from './structured-agent-session-open-recovery'
 import type { StructuredAgentSessionExitSettlement } from './structured-agent-session-leftover-settlement'
 import {
   RECONCILIATION_GIVE_UP_MS,
@@ -110,8 +111,15 @@ export class StructuredAgentSessionRetry {
     }
   }
 
-  /** A reader opened the chat: its handle marks the process boundary if it is the first, and the
-   *  chat is owed a visit, on that handle, in the background. The open itself writes nothing. */
+  prepareOpen = (sessionId: string, journal: AgentSessionJournal): Promise<void> =>
+    prepareStructuredAgentSessionOpen(
+      this.context.deps,
+      sessionId,
+      journal,
+      noteStructuredAgentSessionOpened(this.firstOpened, sessionId, journal)
+    )
+
+  /** An adopted chat is owed a background visit, using its original process boundary. */
   opened = (sessionId: string, journal: Pick<AgentSessionJournal, 'openedAt'>): void => {
     noteStructuredAgentSessionOpened(this.firstOpened, sessionId, journal)
     if (this.disposed) {

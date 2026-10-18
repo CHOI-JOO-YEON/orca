@@ -44,4 +44,5 @@ export type StructuredAgentSessionAttachContext = {
   wakeDelivery?: StructuredAgentSessionLifetimeContext['wakeDelivery']
   /** The conversation's one open journal, opened when closed; see `conversation-open`. */
   openConversation: (sessionId: string) => Promise<StructuredAgentSessionHostSession | null>
+  prepareConversation: (sessionId: string, journal: AgentSessionJournal) => Promise<void>
 }

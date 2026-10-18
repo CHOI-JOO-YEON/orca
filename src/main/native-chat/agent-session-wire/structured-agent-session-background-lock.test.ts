@@ -16,7 +16,10 @@ import { agentJournalItemKey } from '../../../shared/agent-session-journal-item-
 import { JournalQueuedMessages } from '../agent-session-journal/journal-queued-messages'
 import { JournalHostDatabase } from '../agent-session-journal/journal-host-database'
 import { AgentSessionJournal } from '../agent-session-journal/journal-store'
-import { HOST_TEST_SESSION as SESSION } from './structured-agent-session-host-test-data'
+import {
+  HOST_TEST_SESSION as SESSION,
+  hostTestOperationId
+} from './structured-agent-session-host-test-data'
 import {
   exitChild,
   leaveUnfinishedWork,
@@ -26,6 +29,7 @@ import {
 } from './structured-agent-session-leftover-settlement.test-fixture'
 import {
   createQueuedMessageTestRig,
+  QUEUED_RIG_CALLER,
   type QueuedMessageTestRig
 } from './structured-agent-session-queued-message-rig.test-fixture'
 import { retryOwes } from './structured-agent-session-retry.test-fixture'
@@ -119,14 +123,14 @@ describe('under another connection’s write lock', () => {
     )
   }, 30_000)
 
-  it('a relaunch under the lock never holds the main thread, and its startup lands after', async () => {
+  it('a relaunch waits only for canonical send recovery, then its background cleanup lands', async () => {
     vi.spyOn(console, 'warn').mockImplementation(() => undefined)
     rig = await createQueuedMessageTestRig({ restartable: true })
     const current = rig
     await current.workingSend()
     await leaveUnfinishedWork(current, { prompt: true })
 
-    // Every write that runs while the lock is held: none may be one that waits it out.
+    // Only the earlier handed send's canonical recovery uses the ordinary foreground writer.
     const waiting: unknown[] = []
     let held = false
     const transaction = JournalHostDatabase.prototype.transaction
@@ -149,9 +153,9 @@ describe('under another connection’s write lock', () => {
         void released.then(() => (held = false))
       })
     )
-    expect(waiting).toEqual([])
-    // The bar QA holds the app to; the property above is what keeps it there under load.
-    expect(stall).toBeLessThan(100)
+    expect(waiting).toHaveLength(1)
+    expect(stall).toBeGreaterThan(LOCK_MS / 2)
+    expect(stall).toBeLessThan(LOCK_MS + 1_500)
     // Once it lifts the retry reconciles, resolves recovery and settles (the probe proves nothing).
     await vi.waitFor(() => expect(turnState(current)).toBe('unverifiable'), { timeout: 8_000 })
     expect(current.store.getRecord(SESSION)?.lease).toMatchObject({
@@ -293,7 +297,7 @@ describe('under another connection’s write lock', () => {
 })
 
 describe('a refused automatic send whose stored hold fails too', () => {
-  it('reads as not sent from memory, is not named next, and is not sent again', async () => {
+  it('keeps A held through deleting B, replay and refusal, until A itself is deleted', async () => {
     vi.spyOn(console, 'warn').mockImplementation(() => undefined)
     rig = await createQueuedMessageTestRig({ restartable: true })
     const current = rig
@@ -302,6 +306,8 @@ describe('a refused automatic send whose stored hold fails too', () => {
     if (!queued.ok || !('queued' in queued.value)) {
       throw new Error('expected a queued receipt')
     }
+    const other = current.send('another card', 'queue-if-active')
+    expect(await other.result).toMatchObject({ ok: true, value: { queued: { state: 'waiting' } } })
     const diskFull = () => Object.assign(new Error('database or disk is full'), { errcode: 13 })
     const append = vi
       .spyOn(AgentSessionJournal.prototype, 'appendSubmission')
@@ -310,6 +316,32 @@ describe('a refused automatic send whose stored hold fails too', () => {
 
     await current.settleAccepted(working, 'a')
     await vi.waitFor(() => expect(hold).toHaveBeenCalledTimes(1))
+    const deletion = hostTestOperationId()
+    expect(await current.deleteQueued(other.id, deletion)).toMatchObject({
+      ok: true,
+      value: { deleted: true }
+    })
+    expect(await current.deleteQueued(other.id, deletion)).toMatchObject({ ok: true })
+    const messageId = queued.value.queued.messageId
+    expect(
+      await current.host.queuedMessageSend(QUEUED_RIG_CALLER, {
+        envelope: {
+          ...current.envelope(
+            { messageId },
+            'agentSession.queuedMessageSend',
+            hostTestOperationId()
+          ),
+          payloadFingerprint: 'mismatched-send-payload'
+        },
+        messageId
+      })
+    ).toMatchObject({
+      ok: false,
+      refusal: {
+        code: 'agent_session_operation_conflict',
+        details: { reason: 'fingerprintMismatch' }
+      }
+    })
     await new Promise((resolve) => setTimeout(resolve, 300))
 
     const page = await current.host.history({ sessionId: SESSION, direction: 'tail' })
@@ -321,6 +353,12 @@ describe('a refused automatic send whose stored hold fails too', () => {
       })
     ])
     expect(page.ok && page.page.nextQueuedMessageId).toBeNull()
+    expect(append).toHaveBeenCalledTimes(1)
+    expect(await current.deleteQueued(messageId)).toMatchObject({
+      ok: true,
+      value: { deleted: true }
+    })
+    expect(await current.drafts()).toEqual([])
     expect(append).toHaveBeenCalledTimes(1)
   })
 })

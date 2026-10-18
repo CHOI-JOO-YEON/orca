@@ -145,10 +145,10 @@ export function noteStructuredAgentSessionOpened(
   firstOpened: Map<string, AgentJournalCursor>,
   sessionId: string,
   journal: { openedAt: () => AgentJournalCursor }
-): void {
-  if (!firstOpened.has(sessionId)) {
-    firstOpened.set(sessionId, journal.openedAt())
-  }
+): AgentJournalCursor {
+  const opened = firstOpened.get(sessionId) ?? journal.openedAt()
+  firstOpened.set(sessionId, opened)
+  return opened
 }
 
 /** Closes the visit's own read of the chat. */

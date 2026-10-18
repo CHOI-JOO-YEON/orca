@@ -82,7 +82,7 @@ export function deliverToSubscriber(
     return
   }
   const reader = subscriberHistoryReader(subscriber)
-  const readPage = createAgentSessionCatchUpReader(journal, reader)
+  const readPage = createAgentSessionCatchUpReader(journal, reader, work?.formSnapshot)
   while (true) {
     const result = withPublishedWorkResult(
       readPage({
@@ -120,7 +120,7 @@ export function deliverToSubscriber(
     // arrives as the newest page instead; older rows load on scroll.
     if (page.hasNewer && subscriber.boundedFrames) {
       const tail = withPublishedWork(
-        readAgentSessionHydrationPage(journal, subscriber.fence, reader),
+        readAgentSessionHydrationPage(journal, subscriber.fence, reader, work?.formSnapshot),
         work
       )
       emit(subscriber, {

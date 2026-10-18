@@ -19,7 +19,8 @@ export type AgentSessionPublishedWork = Pick<
   | 'working'
   | 'viewKey'
   | 'requestProjection'
->
+> &
+  Partial<Pick<StructuredAgentSessionCurrentWork, 'formSnapshot'>>
 
 type PublishedWorkFields = Pick<
   AgentSessionHistoryPage,

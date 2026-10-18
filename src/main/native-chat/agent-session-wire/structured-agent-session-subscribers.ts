@@ -133,7 +133,8 @@ export class AgentSessionSubscribers {
         readAgentSessionHydrationPage(
           input.journal,
           input.fence,
-          subscriberHistoryReader(subscriber)
+          subscriberHistoryReader(subscriber),
+          work?.formSnapshot
         ),
         work
       )
@@ -213,7 +214,12 @@ export class AgentSessionSubscribers {
     let boundedPage: AgentSessionHistoryPage | undefined
     const read = (subscriber: Subscriber): AgentSessionHistoryPage =>
       withPublishedWork(
-        readAgentSessionHydrationPage(journal, fence, subscriberHistoryReader(subscriber)),
+        readAgentSessionHydrationPage(
+          journal,
+          fence,
+          subscriberHistoryReader(subscriber),
+          work?.formSnapshot
+        ),
         work
       )
     const pageFor = (subscriber: Subscriber): AgentSessionHistoryPage =>

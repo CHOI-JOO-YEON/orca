@@ -11,8 +11,8 @@
 // queued message: a child's exit only ends the child, and this loop reads why. A message an
 // earlier host process left queued is never handed over: the loop hands over only what this
 // process accepted (`structuredAgentSessionHandsOver`), read off the journal, so nothing has to be
-// written first. Keeping that message as a card (`journal-unsent-send-hold.ts`) is the startup
-// share's bookkeeping, and its failure holds up no one.
+// written first. Foreground adoption keeps earlier sends as cards before publication; failed
+// conversion opens anyway and the background retry completes it.
 
 import type { StructuredAgentSessionDeliveryOrder } from './structured-agent-session-delivery-order'
 import type { AgentJournalSubmission } from '../../../shared/agent-session-journal-types'

@@ -16,12 +16,23 @@ export class QueuedSendAbandonment {
     private readonly publish: (sessionId: string, journal: AgentSessionJournal) => void
   ) {}
 
-  card(sessionId: string): string | undefined {
-    return this.cards.get(sessionId)
+  card(sessionId: string, journal: AgentSessionJournal | undefined): string | undefined {
+    const messageId = this.cards.get(sessionId)
+    if (messageId && journal) {
+      const row = journal.queuedMessages.get(messageId)
+      // Only this card's committed transition or stored hold can retire its memory hold.
+      if (!row || row.state !== 'waiting' || row.holdReason !== null) {
+        this.clear(sessionId, messageId)
+        return undefined
+      }
+    }
+    return messageId
   }
 
-  clear(sessionId: string): void {
-    this.cards.delete(sessionId)
+  clear(sessionId: string, messageId: string): void {
+    if (this.cards.get(sessionId) === messageId) {
+      this.cards.delete(sessionId)
+    }
   }
 
   /** Marks the card, then tries its stored hold once; should that fail too, the mark still shows. */
@@ -30,9 +41,7 @@ export class QueuedSendAbandonment {
     void backgroundJournalWrites(journal)
       .queuedMessages.hold({ messageIds: [messageId], reason: QUEUED_MESSAGE_PAUSED_SEND_FAILED })
       .then(() => {
-        if (this.cards.get(sessionId) === messageId) {
-          this.cards.delete(sessionId)
-        }
+        this.card(sessionId, journal)
       })
       .catch(() => undefined)
     this.publish(sessionId, journal)
