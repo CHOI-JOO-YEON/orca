@@ -333,3 +333,41 @@ describe('ACP process-owning connection', () => {
     expect(spawn).not.toHaveBeenCalled()
   })
 })
+
+it.each([true, false])(
+  'settles a typed session response synchronously before the following stdout sign-in line (valid=%s)',
+  async (valid) => {
+    const answers: boolean[] = []
+    const { connection, agent } = fixture({
+      signIn: {
+        read: (line) => (line.startsWith('SIGN IN') ? 'fixture-link' : undefined),
+        answered: (answer) => answers.push(answer)
+      }
+    })
+    agent.on('session/new', (frame) =>
+      agent.stdout.write(
+        `${JSON.stringify({ jsonrpc: '2.0', id: frame.id, result: valid ? { sessionId: 'accepted-session' } : {} })}\nSIGN IN fixture-link\n`
+      )
+    )
+    const result = await connection.start(start).catch((error: unknown) => error)
+    expect(answers).toEqual(valid ? [true, false] : [false])
+    if (valid) expect(result).toMatchObject({ sessionId: 'accepted-session' })
+    else expect(result).toBeInstanceOf(Error)
+    expect(connection.closed).toBe(true)
+  }
+)
+
+it('closes a recognized stdout prompt over 16 MiB without inventing a signed-out answer', async () => {
+  const answered = vi.fn()
+  const { connection, agent } = fixture({
+    signIn: {
+      read: (line) => (line.startsWith('SIGN IN') ? 'prefix-only' : undefined),
+      answered
+    }
+  })
+  await connection.start(start)
+  expect(answered).toHaveBeenCalledExactlyOnceWith(true)
+  agent.stdout.write(`SIGN IN ${'x'.repeat(16 * 1024 * 1024)}\n`)
+  await vi.waitFor(() => expect(connection.closed).toBe(true))
+  expect(answered).toHaveBeenCalledTimes(1)
+})

@@ -17,7 +17,7 @@ import { acpPrivateTempConnect } from '../acp/acp-private-temp'
 import type { ConnectAcpAgent } from '../acp/acp-structured-connection'
 import { resolveAcpLaunchInvocation } from '../acp/acp-structured-launch-resolution'
 import { prepareAcpLaunch } from '../acp/acp-structured-launch-preparation'
-import { AcpAgentError } from '../acp/acp-errors'
+import { AcpAgentError, AcpConnectionClosedError } from '../acp/acp-errors'
 import { isAgentSessionPreSpawnError } from '../native-chat/agent-session-wire/structured-agent-session-adapter'
 import type { structuredAgentHostLaunchSources } from '../runtime/structured-agent-launch-support'
 import {
@@ -135,7 +135,13 @@ async function runFlow(current: Flow, host: AntigravityChatSignInHost): Promise<
     })
     publish(current, { phase: 'signedIn' })
   } catch (error) {
-    console.warn('[antigravity] chat sign-in failed:', error)
+    const phase = antigravityChatSignIn.get().value.flow?.phase
+    const expected =
+      (phase === 'cancelled' || phase === 'expired') &&
+      (error instanceof AcpConnectionClosedError || error === current.ended.signal.reason)
+    if (!expected) {
+      console.warn('[antigravity] chat sign-in failed:', error)
+    }
     // Before the sign-in runs, a refusal is the gate's or the chat stop's own sentence.
     const message =
       signingIn || !(error instanceof Error) ? antigravitySignInFailure(error) : error.message

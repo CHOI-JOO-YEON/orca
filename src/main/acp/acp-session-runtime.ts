@@ -1,11 +1,7 @@
 import type { Readable, Writable } from 'node:stream'
 import { z } from 'zod'
-import {
-  AcpAgentError,
-  AcpAuthRequiredError,
-  AcpInvalidResponseError,
-  AcpRpcError
-} from './acp-errors'
+import { AcpRpcError } from './acp-errors'
+import { callAcpSession } from './acp-response-settlement'
 import { AcpJsonRpcPeer, type AcpPeerOptions, type AcpRequestContext } from './acp-json-rpc-peer'
 import {
   answerAcpPermission,
@@ -59,9 +55,9 @@ export type AcpSessionRuntimeOptions = {
   onDiagnostic?: (message: string) => void
   onClose?: (error: Error) => void
   /** A stdout line that is not a protocol message. */
-  onOtherLine?: (line: string) => void
-  /** The agent answered a request that it needs a sign-in. */
-  onAuthRequired?: () => void
+  onOtherLine?: (line: string, cut?: boolean) => void
+  /** Authentication answers, published synchronously as responses are accepted. */
+  onAuthAnswered?: (signedIn: boolean) => void
 }
 
 /** Stream-level protocol seam; production agents use createAcpAgentConnection. */
@@ -264,23 +260,8 @@ export class AcpSessionRuntime {
     return this.started.sessionId
   }
 
-  private async call<T>(method: string, params: unknown, schema: z.ZodType<T>): Promise<T> {
-    const result = await this.peer.request(method, params, { timeoutMs: null }).catch((error) => {
-      if (error instanceof AcpAgentError && error.code === -32000) {
-        this.options.onAuthRequired?.()
-        throw new AcpAuthRequiredError(error.message, error.data)
-      }
-      throw error
-    })
-    const parsed = schema.safeParse(result)
-    if (!parsed.success) {
-      throw new AcpInvalidResponseError(
-        `Invalid ACP response: ${method}`,
-        result,
-        parsed.error.issues
-      )
-    }
-    return parsed.data
+  private call<T>(method: string, params: unknown, schema: z.ZodType<T>): Promise<T> {
+    return callAcpSession(this.peer, method, params, schema, this.options.onAuthAnswered)
   }
 
   private handleRequest(method: string, params: unknown, context: AcpRequestContext): unknown {

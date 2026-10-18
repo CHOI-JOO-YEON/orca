@@ -5,7 +5,6 @@ import { mkdir, mkdtemp, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { PassThrough } from 'node:stream'
-import { runProcess } from '@orca/process-host'
 import { afterEach, expect, it, vi } from 'vitest'
 import { z } from 'zod'
 import { createFakePipedChild } from '../../shared/__fixtures__/fake-spawned-child'
@@ -19,7 +18,8 @@ import type { RpcContext } from '../runtime/rpc/core'
 import type { RpcCallerIdentity } from '../runtime/rpc/rpc-caller-identity'
 import { ANTIGRAVITY_ACCOUNT_METHODS } from '../runtime/rpc/methods/antigravity-accounts'
 import type { AntigravityChatSignInStatus } from '../../shared/antigravity-account-types'
-import { ANTIGRAVITY_BROWSER_MARKER, antigravityBrowserArgv } from './antigravity-browser-helper'
+import { ANTIGRAVITY_BROWSER_MARKER } from './antigravity-browser-helper'
+import * as browserHelper from './antigravity-browser-helper'
 import { ANTIGRAVITY_SIGN_IN_PROMPT, antigravitySignInUrl } from './antigravity-sign-in-url'
 import {
   cancelAntigravityChatSignIn,
@@ -67,10 +67,9 @@ function fakeServer(agent: AcpScriptedAgent, stderr = new PassThrough()) {
   return child
 }
 
-/** What the server's browser call prints: the real helper, run as the server runs it. */
+/** Scripted browser output; the real command/parser has its own fixture. */
 async function helperOutput(link: string): Promise<string> {
-  const [program = '', ...args] = antigravityBrowserArgv(link)
-  return (await runProcess({ program, args })).stderr
+  return `${ANTIGRAVITY_BROWSER_MARKER}${JSON.stringify(link)}\n`
 }
 
 const sessionFile = (folder: string, suffix: string) =>
@@ -88,6 +87,7 @@ async function signInAgainst(
   } = {}
 ) {
   vi.spyOn(ANTIGRAVITY_LAUNCH_SPEC.managedRuntime, 'pin').mockReturnValue(PIN)
+  vi.spyOn(browserHelper, 'antigravityBrowserHelperWorks').mockResolvedValue(true)
   const stateDirectory = await mkdtemp(join(tmpdir(), 'orca-agy-sign-in-'))
   folders.push(stateDirectory)
   const folder = join(stateDirectory, 'antigravity-chat')
@@ -245,6 +245,7 @@ it('shows another client the sign-in without its link, and refuses it every acti
 })
 
 it('cancels: its pasted address stops, and no Start runs until the sign-in has unwound', async () => {
+  const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
   const arrived = Promise.withResolvers<void>()
   const dropped = Promise.withResolvers<void>()
   // A listener that never answers, so only the flow's end can stop the request.
@@ -269,6 +270,7 @@ it('cancels: its pasted address stops, and no Start runs until the sign-in has u
     // The paste answers with the cancelled flow, not a delivery failure.
     expect((await pasting)?.phase).toBe('cancelled')
     await dropped.promise
+    expect(warn).not.toHaveBeenCalled()
     const next = startAntigravityChatSignIn(
       { launchSources: () => Promise.reject(new Error('x')), stopLiveChats: async () => {} },
       DESKTOP
@@ -322,7 +324,7 @@ it("sets the host's status from what a chat's server answers, and nothing else",
   stderr.write(`${ANTIGRAVITY_BROWSER_MARKER}"not a link"\n`)
   stderr.write(`${ANTIGRAVITY_SIGN_IN_PROMPT}https://accounts.example.com/\n`)
   await new Promise((resolve) => setImmediate(resolve))
-  expect([auth(), chat.closed]).toEqual(['signedIn', false])
+  expect([auth(), chat.closed]).toEqual(['signedOut', false])
   // The printed line, split and left unterminated as the server's last output, still is.
   const line = `${ANTIGRAVITY_SIGN_IN_PROMPT}${GOOGLE_LINK}`
   agent.stdout.write(line.slice(0, 40))
@@ -331,7 +333,7 @@ it("sets the host's status from what a chat's server answers, and nothing else",
   expect(chat.closed).toBe(true)
 })
 
-it('keeps a checking session whose saved folder is not the sign-in\'s own', async () => {
+it("keeps a checking session whose saved folder is not the sign-in's own", async () => {
   const { flowId, folder, host, finishBrowser, openSession } = await signInAgainst(
     printed(GOOGLE_LINK),
     { metaCwd: tmpdir() }
@@ -484,4 +486,20 @@ it('fails without downloading anything while the server is not installed', async
   const state = await stateAfter(flowId, 'starting')
   expect(state).toMatchObject({ phase: 'failed', error: expect.stringContaining('not installed') })
   expect(connect).not.toHaveBeenCalled()
+})
+
+it('expires a waiting sign-in quietly and releases its launch gate', async () => {
+  const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+  try {
+    const { flowId } = await signInAgainst(printed(GOOGLE_LINK))
+    expect(await stateAfter(flowId, 'starting')).toMatchObject({ phase: 'waiting' })
+    await vi.advanceTimersByTimeAsync(300_000)
+    expect(readAntigravityChatSignInStatus(DESKTOP).flow).toMatchObject({ phase: 'expired' })
+    expect(warn).not.toHaveBeenCalled()
+    const entry = ANTIGRAVITY_LAUNCH_SPEC.launchGate!.enter(undefined)
+    entry.leave()
+  } finally {
+    vi.useRealTimers()
+  }
 })

@@ -9,7 +9,6 @@ import type { ProviderProcessLaunch } from '../provider-process/provider-process
 import { AcpAuthRequiredError, AcpConnectionClosedError } from './acp-errors'
 import { resolveAcpPeerOptions, type AcpPeerOptions } from './acp-peer-limits'
 import { AcpSessionRuntime, type AcpSessionRuntimeOptions } from './acp-session-runtime'
-import type { AcpSessionStarted, AcpSessionStartOptions } from './acp-session-setup'
 
 /** How an agent that signs in through a browser says so on its output. */
 export type AcpSignInWatch = {
@@ -47,7 +46,6 @@ export class AcpAgentConnection extends AcpSessionRuntime {
   private readonly managed: ManagedProviderProcess
   private readonly lifecycle: { closing: boolean; error?: Error }
   private readonly diagnoseLifecycle: (message: string) => void
-  private readonly signIn: AcpSignInWatch | undefined
   readonly spawned: Promise<void>
 
   constructor(
@@ -99,8 +97,8 @@ export class AcpAgentConnection extends AcpSessionRuntime {
     super(managed.child.stdout, managed.child.stdin, {
       ...options,
       peer,
-      onOtherLine: (line) => signInLine(line, 'stdout'),
-      onAuthRequired: () => signIn?.answered?.(false),
+      onOtherLine: (line, cut) => signInLine(line, 'stdout', cut),
+      onAuthAnswered: (signedIn) => signIn?.answered?.(signedIn),
       onClose: (error) => {
         lifecycle.error ??= error
         if (lifecycle.closing || managed.rootVerdict === 'exited') {
@@ -120,7 +118,6 @@ export class AcpAgentConnection extends AcpSessionRuntime {
     this.managed = managed
     this.lifecycle = lifecycle
     this.diagnoseLifecycle = diagnose
-    this.signIn = signIn
     const { child } = managed
     this.spawned = new Promise((resolve) => {
       if (child.pid !== undefined) {
@@ -155,12 +152,6 @@ export class AcpAgentConnection extends AcpSessionRuntime {
         diagnose(`ACP exit listener failed: ${String(failure)}`)
       }
     })
-  }
-
-  override async start(options: AcpSessionStartOptions): Promise<AcpSessionStarted> {
-    const started = await super.start(options)
-    this.signIn?.answered?.(true)
-    return started
   }
 
   get pid(): number | undefined {
