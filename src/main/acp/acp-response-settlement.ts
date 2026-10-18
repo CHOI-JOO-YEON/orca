@@ -47,3 +47,16 @@ export type AcpPendingResponse = {
   reject: (error: Error) => void
   timer?: ReturnType<typeof setTimeout>
 }
+
+export function readAcpResponse(
+  response: AcpResponse,
+  settle: AcpRequestOptions['settle'] | undefined
+): unknown {
+  if (settle) {
+    return settle(response)
+  }
+  if ('error' in response) {
+    throw response.error
+  }
+  return response.value
+}

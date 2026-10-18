@@ -351,8 +351,11 @@ it.each([true, false])(
     )
     const result = await connection.start(start).catch((error: unknown) => error)
     expect(answers).toEqual(valid ? [true, false] : [false])
-    if (valid) expect(result).toMatchObject({ sessionId: 'accepted-session' })
-    else expect(result).toBeInstanceOf(Error)
+    if (valid) {
+      expect(result).toMatchObject({ sessionId: 'accepted-session' })
+    } else {
+      expect(result).toBeInstanceOf(Error)
+    }
     expect(connection.closed).toBe(true)
   }
 )

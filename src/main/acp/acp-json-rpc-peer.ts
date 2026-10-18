@@ -1,5 +1,6 @@
 import type { Readable, Writable } from 'node:stream'
 import { z } from 'zod'
+import { readAcpResponse } from './acp-response-settlement'
 import type { AcpResponse, AcpRequestOptions, AcpPendingResponse } from './acp-response-settlement'
 import {
   createIncrementalNdjsonFramer,
@@ -126,9 +127,7 @@ export class AcpJsonRpcPeer {
     return new Promise((resolve, reject) => {
       const settle = (response: AcpResponse): void => {
         try {
-          if (options.settle) resolve(options.settle(response))
-          else if ('error' in response) reject(response.error)
-          else resolve(response.value)
+          resolve(readAcpResponse(response, options.settle))
         } catch (error) {
           reject(error)
         }

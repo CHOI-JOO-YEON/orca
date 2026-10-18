@@ -329,8 +329,7 @@ it("sets the host's status from what a chat's server answers, and nothing else",
   const line = `${ANTIGRAVITY_SIGN_IN_PROMPT}${GOOGLE_LINK}`
   agent.stdout.write(line.slice(0, 40))
   agent.stdout.end(line.slice(40))
-  await vi.waitFor(() => expect(auth()).toBe('signedOut'))
-  expect(chat.closed).toBe(true)
+  await vi.waitFor(() => expect([auth(), chat.closed]).toEqual(['signedOut', true]))
 })
 
 it("keeps a checking session whose saved folder is not the sign-in's own", async () => {
@@ -496,9 +495,11 @@ it('expires a waiting sign-in quietly and releases its launch gate', async () =>
     expect(await stateAfter(flowId, 'starting')).toMatchObject({ phase: 'waiting' })
     await vi.advanceTimersByTimeAsync(300_000)
     expect(readAntigravityChatSignInStatus(DESKTOP).flow).toMatchObject({ phase: 'expired' })
+    await vi.waitFor(() => {
+      const entry = ANTIGRAVITY_LAUNCH_SPEC.launchGate!.enter(undefined)
+      entry.leave()
+    })
     expect(warn).not.toHaveBeenCalled()
-    const entry = ANTIGRAVITY_LAUNCH_SPEC.launchGate!.enter(undefined)
-    entry.leave()
   } finally {
     vi.useRealTimers()
   }
