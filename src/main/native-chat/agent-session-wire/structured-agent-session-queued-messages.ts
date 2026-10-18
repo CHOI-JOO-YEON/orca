@@ -8,10 +8,7 @@
 
 import { randomUUID } from 'node:crypto'
 import type { AgentJournalMessageItem } from '../../../shared/agent-session-journal-types'
-import type {
-  AgentSessionSendResult,
-  AgentSessionWireRefusal
-} from '../../../shared/agent-session-wire'
+import type * as QueueWire from '../../../shared/agent-session-wire'
 import { createStructuredAgentSessionOperationId } from '../../../shared/structured-agent-session-mutation'
 import { agentSessionSendBodyFingerprint } from '../../../shared/structured-agent-session-send-mutation'
 import { queuedSendAnswer } from './structured-agent-session-queued-send-answer'
@@ -39,11 +36,6 @@ import { nextSendableQueuedCard } from '../agent-session-journal/queued-message-
 import type { StructuredAgentSessionLogger } from './structured-agent-session-logger'
 import { agentSessionAttachmentExpiredRefusal } from './structured-agent-session-turns'
 import { isAgentSessionAttachmentExpiredError } from '../agent-session-attachments/agent-session-attachment-claims'
-
-/** Text-only v1: any image block routes to the immediate path. */
-export function queuedMessageBodyIsTextOnly(body: AgentJournalMessageItem): boolean {
-  return body.blocks.every((block) => block.type === 'text')
-}
 
 /** Waiting, not held on its own, and not positioned behind a returned card or a
  *  card the queue's pause holds: the queue never reorders. The admission rule
@@ -148,8 +140,8 @@ export function shouldQueueStructuredAgentSessionSend(
 /**
  * The accept branch: a capable send while the session is working (or behind an
  * actionable backlog) becomes a draft instead of a submission. Returns null for
- * the immediate path — an incapable client, an image body (text-only v1), a
- * replayed id the journal already answers, or an idle session.
+ * the immediate path — an incapable client, a replayed id the journal already
+ * answers, or an idle session.
  */
 export async function maybeQueueStructuredAgentSessionSend(
   context: {
@@ -163,6 +155,7 @@ export async function maybeQueueStructuredAgentSessionSend(
     envelope: { clientOperationId: string }
     body: AgentJournalMessageItem
     delivery?: 'queue-if-active'
+    queuedImageCards?: boolean
     options?: Readonly<Record<string, string>>
     /** A person's send at a chat surface: every attachment it names must still be stored. */
     userSend?: true
@@ -170,12 +163,16 @@ export async function maybeQueueStructuredAgentSessionSend(
     personsMessage?: true
   }
 ): Promise<
-  | { ok: true; value: AgentSessionSendResult }
-  | { ok: false; refusal: AgentSessionWireRefusal }
+  | { ok: true; value: QueueWire.AgentSessionSendResult }
+  | { ok: false; refusal: QueueWire.AgentSessionWireRefusal }
   | null
 > {
   const clientMessageId = params.envelope.clientOperationId
-  if (params.delivery !== 'queue-if-active' || !queuedMessageBodyIsTextOnly(params.body)) {
+  if (
+    params.delivery !== 'queue-if-active' ||
+    (params.queuedImageCards === false &&
+      params.body.blocks.some((block) => block.type === 'image-ref'))
+  ) {
     return null
   }
   // Asked again with no ledger answer: a send this host queued answers as its replay would —

@@ -24,6 +24,7 @@ import {
   paneKeyOf,
   type LayoutClosedTab,
   type LayoutContentTab,
+  type LayoutTab,
   type LayoutTerminalTab,
   type WorkspaceLayout,
   type WorkspaceLayoutModel
@@ -51,15 +52,16 @@ export function createTerminalTab(
   const tab: LayoutTerminalTab = {
     id,
     entityId: id,
-    createdAt: context.now(),
+    createdAt: command.createdAt ?? context.now(),
     customTitle: command.title ?? null,
     color: command.color ?? null,
+    ...(command.quickCommandLabel ? { quickCommandLabel: command.quickCommandLabel } : {}),
     ...(command.viewMode ? { viewMode: command.viewMode } : {}),
     kind: 'terminal',
     terminal: { defaultTitle: `Terminal ${ordinal}`, ...command.creation },
     panes: { root: { type: 'leaf', leafId } }
   }
-  const placed = placeNewTab(workspace, tab, command, context)
+  const placed = placeNewTab(workspace, command.workspace, tab, command, context)
   const paneKey = paneKeyOf(id, leafId)
   return applied(
     withWorkspace(model, command.workspace, placed),
@@ -181,12 +183,18 @@ export function setTabProps(
   if (!tab) {
     return refuse('tab_not_found')
   }
-  const next = {
-    ...tab,
+  if (command.clearLaunchAgent && tab.kind !== 'terminal') {
+    return refuse('invalid_params')
+  }
+  const props = {
     ...(command.color !== undefined ? { color: command.color } : {}),
     ...(command.isPinned !== undefined ? { isPinned: command.isPinned } : {}),
     ...(command.viewMode !== undefined ? { viewMode: command.viewMode } : {})
   }
+  const next: LayoutTab =
+    command.clearLaunchAgent && tab.kind === 'terminal'
+      ? { ...tab, ...props, terminal: omitStoredFields(tab.terminal, ['launchAgent']) }
+      : { ...tab, ...props }
   let updated = {
     ...workspace,
     tabs: workspace.tabs.map((entry) => (entry.id === tab.id ? next : entry))
@@ -268,8 +276,14 @@ export function placeContentTab(
     key,
     placeNewTab(
       workspace,
+      key,
       tab,
-      { groupId: group?.id, afterTabId: placement.afterTabId, index: placement.index },
+      // The sender's group names a workspace's first group.
+      {
+        groupId: group?.id ?? placement.groupId,
+        afterTabId: placement.afterTabId,
+        index: placement.index
+      },
       context
     )
   )

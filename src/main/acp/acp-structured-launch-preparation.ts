@@ -11,15 +11,17 @@ import type { AcpStructuredSessionAdapterDeps } from './acp-structured-session-a
 /** The launch a start spawns; `closedBeforeSpawn` throws once the start was abandoned. */
 export async function prepareAcpStructuredLaunch(
   deps: Pick<AcpStructuredSessionAdapterDeps, 'spec' | 'resolveLaunch'>,
-  acquire: Pick<StructuredAgentSessionAcquireInput, 'identity' | 'spawnToken'>,
+  acquire: Pick<StructuredAgentSessionAcquireInput, 'identity' | 'spawnToken' | 'permissionMode'>,
   closedBeforeSpawn: () => void
 ): Promise<AcpStructuredLaunch> {
   const { spec } = deps
   const launch = await deps
-    .resolveLaunch({ identity: acquire.identity, spawnToken: acquire.spawnToken })
-    .catch((error: unknown) => {
-      throw new AgentSessionPreSpawnError(error)
+    .resolveLaunch({
+      identity: acquire.identity,
+      spawnToken: acquire.spawnToken,
+      ...(acquire.permissionMode ? { permissionMode: acquire.permissionMode } : {})
     })
+    .catch(preSpawnFailure)
   closedBeforeSpawn()
   // A missed lookup returns the bare name; a selected Command setting resolves or refuses.
   if (spec.managedRuntime && launch.command === spec.command) {
@@ -28,5 +30,14 @@ export async function prepareAcpStructuredLaunch(
       { reason: 'runtimeNotInstalled' }
     )
   }
+  const { prepare } = spec.account
+  if (prepare) {
+    await prepare(launch.env).catch(preSpawnFailure)
+    closedBeforeSpawn()
+  }
   return launch
+}
+
+function preSpawnFailure(error: unknown): never {
+  throw new AgentSessionPreSpawnError(error)
 }

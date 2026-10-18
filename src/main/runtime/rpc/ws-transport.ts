@@ -3,8 +3,7 @@ import { createServer as createHttpsServer, type Server as HttpsServer } from 'n
 import { createServer as createHttpServer, type Server as HttpServer } from 'node:http'
 import { WebSocketServer, type WebSocket } from 'ws'
 import type { RpcTransport } from './transport'
-import { createStaticWebClientHandler } from './static-web-client-handler'
-import { hasWebClientUpgradeMarker } from '../../../shared/web-origin-security'
+import { answerWithoutWebClient, createStaticWebClientHandler } from './static-web-client-handler'
 import {
   attachNodeWebSocketLifecycle,
   clearNodeWebSocketPreAuthTimer,
@@ -65,7 +64,6 @@ export class WebSocketTransport implements RpcTransport {
   private readonly fallbackLadder: readonly number[]
   private persistedFallbackBindFailed = false
   private httpServer: HttpsServer | HttpServer | null = null
-  private readonly webPages = new WeakMap<WebSocket, { webOrigin?: string; webClient: true }>()
   private wss: WebSocketServer | null = null
   private messageHandler: WebSocketMessageHandler | null = null
   private connectionCloseHandler: WebSocketConnectionCloseHandler | null = null
@@ -117,11 +115,6 @@ export class WebSocketTransport implements RpcTransport {
   // Why: pass the closing `ws` and whether other sockets share its client id (the device id), so client-scoped teardown fires only on the last disconnect.
   onConnectionClose(handler: WebSocketConnectionCloseHandler): void {
     this.connectionCloseHandler = handler
-  }
-
-  /** The Orca web bundle that opened `ws` (it marks its upgrade), with its page origin. */
-  webPageOf(ws: WebSocket): { webOrigin?: string; webClient: true } | undefined {
-    return this.webPages.get(ws)
   }
 
   setClientId(ws: WebSocket, clientId: string): void {
@@ -207,9 +200,10 @@ export class WebSocketTransport implements RpcTransport {
   }
 
   private createHttpServer(): HttpServer | HttpsServer {
+    // Why the 404: with no 'request' listener Node never answers plain HTTP, so it hung (#30100).
     const requestListener = this.staticRoot
       ? createStaticWebClientHandler(this.staticRoot)
-      : undefined
+      : answerWithoutWebClient
     return this.tlsCert && this.tlsKey
       ? createHttpsServer({ cert: this.tlsCert, key: this.tlsKey }, requestListener)
       : createHttpServer(requestListener)
@@ -236,17 +230,10 @@ export class WebSocketTransport implements RpcTransport {
       maxPayload: WEBSOCKET_TRANSPORT_MAX_MESSAGE_BYTES
     })
 
-    wss.on('connection', (ws, request) => {
+    wss.on('connection', (ws) => {
       if (wss.clients.size > WEBSOCKET_TRANSPORT_MAX_CONNECTIONS) {
         rejectNodeWebSocketOverCapacity(ws)
         return
-      }
-      if (hasWebClientUpgradeMarker(request.url)) {
-        const origin = request.headers.origin
-        this.webPages.set(ws, {
-          ...(typeof origin === 'string' ? { webOrigin: origin } : {}),
-          webClient: true
-        })
       }
       this.handleConnection(ws)
     })

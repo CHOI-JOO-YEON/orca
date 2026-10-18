@@ -1,3 +1,4 @@
+import type { AgentChildWorkView } from '../../../shared/agent-status-child-work-view'
 import type { AgentJournalSnapshot } from '../../../shared/agent-session-journal-types'
 import {
   isBackgroundTaskBlock,
@@ -132,7 +133,7 @@ export class StructuredAgentSessionJournalProjections {
         state: withDiedTurnVerdict(
           projectStructuredAgentSessionStatusState(
             snapshot.items,
-            snapshot.submissions,
+            snapshot.submissions.map(work.publishedSubmission),
             fence,
             work.scope
           ),
@@ -201,4 +202,18 @@ function unobservedJournalChildren(
     }
   }
   return children
+}
+
+/** Keep reported outcomes intact while an unobserved live owner reads as unverifiable. */
+export function observedStatusChildWork(
+  view: AgentChildWorkView,
+  unseen: ReadonlyMap<string, string | undefined>
+): AgentChildWorkView {
+  const key = `${view.kind}:${view.providerId}`
+  const run = unseen.get(key)
+  return view.membership === 'live' &&
+    unseen.has(key) &&
+    (run === undefined || run === view.invocation.invocationId)
+    ? { ...view, state: 'unverifiable' }
+    : view
 }

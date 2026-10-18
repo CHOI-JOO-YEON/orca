@@ -8,8 +8,6 @@
 // an operation only the provider can perform starts it before admission.
 
 import { AGENT_CHAT_PERMISSION_MODE_OPTION_ID } from '../../../shared/agent-chat-permission-mode'
-import { settleStructuredAgentSessionLateDispatch } from './structured-agent-session-late-dispatch'
-import { releaseStructuredAgentSessionUnansweredDispatches } from './structured-agent-session-unanswered-dispatch-release'
 import type { AgentJournalMessageItem } from '../../../shared/agent-session-journal-types'
 import type {
   AgentSessionCancelResult,
@@ -60,6 +58,8 @@ import {
   type StructuredAgentSessionOptionsReader
 } from './structured-agent-session-options-read'
 import { writeStructuredAgentSessionOption } from './structured-agent-session-message-options'
+import { settleStructuredAgentSessionLateDispatch } from './structured-agent-session-late-dispatch'
+import { releaseStructuredAgentSessionUnansweredDispatches } from './structured-agent-session-unanswered-dispatch-release'
 
 export function sendStructuredAgentSessionTurn(
   context: StructuredAgentSessionMutationContext,
@@ -69,6 +69,8 @@ export function sendStructuredAgentSessionTurn(
     body: AgentJournalMessageItem
     retryUnknown?: true
     delivery?: 'queue-if-active'
+    /** Host-local: whether the sending client can manage an image card. */
+    queuedImageCards?: boolean
     options?: Readonly<Record<string, string>>
     /** Host-local, set only by the client-facing `agentSession.send` RPC (the
      *  renderer's launch prompt included): recorded as the submission's `client`
@@ -127,6 +129,11 @@ export function cancelStructuredAgentSessionTurn(
         ...params,
         childWork: () => context.readChildWork(sessionId),
         acknowledgeStops: (evidence) => context.publishChildWork(sessionId, evidence),
+        captureStops: (targets) =>
+          context.captureChildWorkStops(
+            sessionId,
+            targets.map((target) => target.providerId)
+          ),
         // Untargeted, with work no record lists: the idle sweep's stop ends it with the agent.
         ...(params.taskId === undefined
           ? {
