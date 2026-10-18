@@ -264,7 +264,7 @@ export class StructuredAgentSessionStatusFeed {
    *  Tokens stay live on the background-task channel. */
   private childWorkFields(
     sessionId: string,
-    provider: StatusFeedSession['params']['provider']
+    provider: FeedDeps.StatusFeedSession['params']['provider']
   ): Pick<StatusWire.AgentSessionStatusSummary, 'children' | 'backgroundTasks'> {
     const { children, backgroundTasks } = structuredStatusChildWork(
       this.readChildWork(sessionId),
