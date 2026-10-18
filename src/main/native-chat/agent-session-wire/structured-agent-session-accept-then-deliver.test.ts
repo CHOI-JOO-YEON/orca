@@ -13,14 +13,8 @@ import {
   AGENT_JOURNAL_THREAD_SCOPE,
   type AgentJournalSubmission
 } from '../../../shared/agent-session-journal-types'
-import type {
-  AgentSessionSubscribeEvent,
-  AgentSessionTurnCompletionEvent
-} from '../../../shared/agent-session-wire'
-import {
-  classifyDispatchRejection,
-  DISPATCH_REJECTED_CANCELLED
-} from '../../../shared/structured-agent-session-dispatch-rejection'
+import type * as TestWire from '../../../shared/agent-session-wire'
+import * as rejection from '../../../shared/structured-agent-session-dispatch-rejection'
 import { AgentSessionRecordStore } from '../../runtime/agent-session-record-store'
 import { openTestAgentSessionRecordStore } from '../../runtime/agent-session-record-store-test-harness'
 import type { AgentSessionJournal } from '../agent-session-journal/journal-store'
@@ -212,8 +206,8 @@ async function errorFailures(): Promise<(AgentSessionFailureFact | undefined)[]>
 
 let subscriptions = 0
 
-async function subscribe(): Promise<AgentSessionSubscribeEvent[]> {
-  const events: AgentSessionSubscribeEvent[] = []
+async function subscribe(): Promise<TestWire.AgentSessionSubscribeEvent[]> {
+  const events: TestWire.AgentSessionSubscribeEvent[] = []
   subscriptions += 1
   // Cloned as received: a frame shares the journal's live objects, which later rows revise.
   await host.subscribe({
@@ -225,7 +219,7 @@ async function subscribe(): Promise<AgentSessionSubscribeEvent[]> {
 }
 
 /** What an open chat was told about one message, in frame order. */
-function framedStates(events: AgentSessionSubscribeEvent[], id: string): string[] {
+function framedStates(events: TestWire.AgentSessionSubscribeEvent[], id: string): string[] {
   let previous: string | undefined
   return events.flatMap((event) =>
     event.type === 'batch'
@@ -419,7 +413,7 @@ describe('a start the chat needed and did not get', () => {
   it('notifies failed once for the queued messages one start failure refused', async () => {
     await host.close(SESSION, 'evict')
     acquire.mockRejectedValueOnce(new Error('spawn codex ENOENT'))
-    const completions: AgentSessionTurnCompletionEvent[] = []
+    const completions: TestWire.AgentSessionTurnCompletionEvent[] = []
     host.subscribeTurnCompletions({ id: 'dot-1', emit: (event) => completions.push(event) })
     await accept('first')
     const second = await accept('second')
@@ -732,7 +726,7 @@ describe('Stop withdraws what is queued', () => {
     starting.resolve()
     expect(await stopped).toMatchObject({ ok: true })
     await eventually(async () => expect((await submission(id))?.dispatchState).toBe('rejected'))
-    expect(await submission(id)).toMatchObject({ reason: DISPATCH_REJECTED_CANCELLED })
+    expect(await submission(id)).toMatchObject({ reason: rejection.DISPATCH_REJECTED_CANCELLED })
     expect((await submission(id))?.handedOverAt).toBeUndefined()
     expect(dispatch).not.toHaveBeenCalled()
   })
@@ -752,7 +746,7 @@ describe('Stop withdraws what is queued', () => {
 
     expect(await reopened(id)).toMatchObject({
       dispatchState: 'rejected',
-      reason: DISPATCH_REJECTED_CANCELLED
+      reason: rejection.DISPATCH_REJECTED_CANCELLED
     })
     expect(closeSession).toHaveBeenCalled()
     const next = await accept('after stop')
@@ -867,7 +861,7 @@ describe('a close that stops the child and then a wind-down step fails', () => {
       await eventually(async () => expect((await submission(id))?.dispatchState).toBe('rejected'))
       const rejected = (await submission(id))!
       expect(rejected.rejection).toMatchObject({ kind })
-      expect(classifyDispatchRejection(rejected).verdict).toBe(verdict)
+      expect(rejection.classifyDispatchRejection(rejected).verdict).toBe(verdict)
       expect(dispatch).not.toHaveBeenCalled()
     }
   )
