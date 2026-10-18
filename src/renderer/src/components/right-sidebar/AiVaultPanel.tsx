@@ -273,11 +273,7 @@ export default function AiVaultPanel(): React.JSX.Element {
         </div>
       ) : null}
 
-      {!searching && (
-        <AiVaultScanIssueBanners
-          scanResult={scanResult}
-        />
-      )}
+      {!searching && <AiVaultScanIssueBanners scanResult={scanResult} />}
       <AiVaultPanelSearch search={search} noAgents={agents.length === 0}>
         {searching
           ? filteredSessions.length > 0 && (
