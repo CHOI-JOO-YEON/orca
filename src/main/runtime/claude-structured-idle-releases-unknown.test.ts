@@ -14,7 +14,10 @@ import {
 import { hasUnansweredStructuredAgentSessionDispatch } from '../../shared/structured-agent-session-unanswered-dispatch'
 import { hostTestMessage } from '../native-chat/agent-session-wire/structured-agent-session-host-test-data'
 import type { StructuredAgentSessionHost } from '../native-chat/agent-session-wire/structured-agent-session-host'
-import { createScriptedClaudeRuntime } from './structured-claude-scripted-runtime-test-support'
+import {
+  createScriptedClaudeRuntime,
+  scriptedClaudeExitError
+} from './structured-claude-scripted-runtime-test-support'
 
 const SESSION = 'claude-idle-release'
 const PROVIDER_SESSION = claudeSessionIdForOrcaSession(SESSION)
@@ -68,13 +71,14 @@ function sessionState(state: 'running' | 'idle'): Record<string, unknown> {
 }
 
 describe('a live Claude chat whose send could not be written', () => {
-  it('stops Working at once, and clients read the send in doubt', async () => {
+  it('releases doubt at once and stays quiet on idle exit after a later successful turn', async () => {
     const host = await claude.install()
     await expect(host.attach(CALLER, claude.attachParams(SESSION, null))).resolves.toMatchObject({
       ok: true
     })
     // Handed to the SDK, then the write's outcome was lost.
-    claude.child(SESSION).connection.send = async (_message, beforeDispatch) => {
+    const child = claude.child(SESSION)
+    child.connection.send = async (_message, beforeDispatch) => {
       await beforeDispatch?.()
       throw new Error('stdin write stalled')
     }
@@ -95,6 +99,33 @@ describe('a live Claude chat whose send could not be written', () => {
     expect(published && hasUnansweredStructuredAgentSessionDispatch([published], fence(host))).toBe(
       false
     )
+
+    child.connection.send = async (message, beforeDispatch) => {
+      await beforeDispatch?.()
+      child.handlers.onMessage?.({ ...message, session_id: PROVIDER_SESSION })
+      child.handlers.onMessage?.({
+        type: 'result',
+        subtype: 'success',
+        is_error: false,
+        uuid: 'later-result',
+        session_id: PROVIDER_SESSION
+      })
+    }
+    const later = await send(host, 'second succeeds')
+    await vi.waitFor(async () =>
+      expect(await submission(host, later)).toMatchObject({ dispatchState: 'accepted' })
+    )
+    await vi.waitFor(() => expect(host.currentWork(SESSION)?.working()).toBe(false))
+    child.exit(scriptedClaudeExitError('claude stream-json exited (code 137)'))
+    await vi.waitFor(() =>
+      expect(host.deps.store.getRecord(SESSION)?.lease.claimStatus).toBe('released')
+    )
+    const snapshot = await host.journalSnapshot(SESSION)
+    expect(snapshot.items.some((item) => item.body.kind === 'status' && item.body.failure)).toBe(false)
+    expect(
+      snapshot.items.some((item) => item.body.kind === 'turn' && item.body.state === 'completed')
+    ).toBe(true)
+    expect(await submission(host, doubted)).toMatchObject({ dispatchState: 'unknown' })
   })
 })
 

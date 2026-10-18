@@ -224,6 +224,7 @@ export function mintClaudeAcquisitionGeneration(deps: ClaudeStructuredSessionAda
  * what the ladder observed, not an absence it would otherwise report as proven.
  */
 export type ClaudeSessionExit = {
+  observedAt: number
   connection: ClaudeStreamJsonConnection
   /** Full session identity retained until the exit settles. */
   session: ClaudeSession

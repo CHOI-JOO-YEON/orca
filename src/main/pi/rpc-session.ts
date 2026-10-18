@@ -269,11 +269,13 @@ export class PiRpcSession {
       return
     }
     this.publishedExit = true
+    const observedAt = Date.now()
+    this.input.events?.observeExit?.(this.heldSends, observedAt)
     this.dialogs.cancelAll()
     this.turns.end()
     this.lane.finalize()
     this.lane.apply([
-      { type: 'session.ended', verdict: { state: 'interrupted', completedAt: Date.now() } }
+      { type: 'session.ended', verdict: { state: 'interrupted', completedAt: observedAt } }
     ])
     this.lane.flush()
     let timer: ReturnType<typeof setTimeout> | undefined
@@ -299,7 +301,7 @@ export class PiRpcSession {
       sessionId: this.input.identity.sessionId,
       fence: this.input.fence,
       acquisitionGeneration: this.generation,
-      observedAt: Date.now(),
+      observedAt,
       cause: this.requestedClose ? 'requested-close' : 'unexpected-exit',
       reason: (this.failedCause ?? error).message
     })

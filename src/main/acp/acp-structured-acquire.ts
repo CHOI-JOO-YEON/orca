@@ -281,6 +281,7 @@ export async function acquireAcpStructuredSession(input: {
       ...takeover
     }
     session = {
+      events,
       sessionId,
       fence: acquire.fence,
       acquisitionGeneration: generation,
