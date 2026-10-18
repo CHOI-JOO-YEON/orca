@@ -1,4 +1,4 @@
-import { useCallback, useSyncExternalStore } from 'react'
+import { useCallback, useState, useSyncExternalStore } from 'react'
 import type { AiVaultScanProgress } from '../../../../shared/ai-vault-scan-progress'
 import { LOCAL_EXECUTION_HOST_ID, type ExecutionHostScope } from '../../../../shared/execution-host'
 
@@ -73,11 +73,22 @@ function loadKey(scanKey: string): void {
     .catch(() => pendingLoads.delete(scanKey))
 }
 
-/** Live progress follows the request key; settled progress also needs the applied result's ID. */
+function useKeyProgress(
+  subscribe: (listener: () => void) => () => void,
+  local: boolean,
+  scanKey: string
+): AiVaultScanProgress | null {
+  const snapshot = useCallback(
+    () => (local ? (progressByKey.get(scanKey) ?? null) : null),
+    [local, scanKey]
+  )
+  return useSyncExternalStore(subscribe, snapshot)
+}
+
+/** Follows the request key; until that key has progress, keeps following the key shown before. */
 export function useAiVaultScanProgress(
   executionHostScope: ExecutionHostScope,
-  scanKey: string,
-  appliedScanId: string | undefined
+  scanKey: string
 ): AiVaultScanProgress | null {
   const local = executionHostScope === LOCAL_EXECUTION_HOST_ID
   const subscribe = useCallback(
@@ -91,18 +102,15 @@ export function useAiVaultScanProgress(
     },
     [local, scanKey]
   )
-  const snapshot = useCallback(() => {
-    const progress = local ? progressByKey.get(scanKey) : undefined
-    if (!progress) {
-      return null
-    }
-    return progress.stage === 'finding' ||
-      progress.stage === 'reading' ||
-      progress.scanId === appliedScanId
-      ? progress
-      : null
-  }, [appliedScanId, local, scanKey])
-  return useSyncExternalStore(subscribe, snapshot)
+  // Why: the key follows the active worktree, so dropping to nothing between keys would
+  // make the strip vanish and the list jump on every switch.
+  const [shownKey, setShownKey] = useState(scanKey)
+  const own = useKeyProgress(subscribe, local, scanKey)
+  const shown = useKeyProgress(subscribe, local, shownKey)
+  if (own && shownKey !== scanKey) {
+    setShownKey(scanKey)
+  }
+  return own ?? shown
 }
 
 export function resetAiVaultScanProgressStoreForTests(): void {

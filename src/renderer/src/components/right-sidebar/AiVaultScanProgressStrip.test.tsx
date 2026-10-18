@@ -3,11 +3,9 @@ import { act, cleanup, render, renderHook, screen, waitFor, within } from '@test
 import userEvent from '@testing-library/user-event'
 import { afterEach, expect, it, vi } from 'vitest'
 import type { AiVaultScanProgress } from '../../../../shared/ai-vault-scan-progress'
-import type { AiVaultListResult } from '../../../../shared/ai-vault-types'
 import { aiVaultLocalScanKey } from '../../../../shared/ai-vault-local-scan-key'
 import { AiVaultScanProgressStrip } from './AiVaultScanProgressStrip'
 import { resetAiVaultSessionResultCacheForTest } from './ai-vault-session-result-cache'
-import { currentAiVaultScanIssueResult } from './ai-vault-scan-issue-state'
 import {
   resetAiVaultScanProgressStoreForTests,
   useAiVaultScanProgress
@@ -61,10 +59,10 @@ it('keeps a narrower cached panel off the broader key while a late matching pane
       }
     }
   })
-  const local = renderHook(() => useAiVaultScanProgress('local', broader, cachedProgress.scanId))
-  const narrowerPanel = renderHook(() => useAiVaultScanProgress('local', narrower, undefined))
+  const local = renderHook(() => useAiVaultScanProgress('local', broader))
+  const narrowerPanel = renderHook(() => useAiVaultScanProgress('local', narrower))
   const remote = renderHook(() =>
-    useAiVaultScanProgress('runtime:server-1', broader, cachedProgress.scanId)
+    useAiVaultScanProgress('runtime:server-1', broader)
   )
   await waitFor(() => expect(local.result.current).toBe(cachedProgress))
   act(() => push({ scanKey: broader, progress: cachedProgress }))
@@ -79,60 +77,42 @@ it('keeps a narrower cached panel off the broader key while a late matching pane
   expect(remote.result.current).toBeNull()
 })
 
-it('hides an old issue only while this panel is refreshing', () => {
-  const oldIssue: AiVaultListResult = {
-    sessions: [],
-    issues: [],
-    scannedAt: new Date(1_000).toISOString()
-  }
-  expect(currentAiVaultScanIssueResult(oldIssue, true)).toBeNull()
-  expect(currentAiVaultScanIssueResult(oldIssue)).toBe(oldIssue)
-})
-
-it('shows a running scan at once but a finished one only with the list it produced', () => {
+it('keeps the strip on screen through rescans and worktree switches', () => {
   let push: (update: { scanKey: string; progress: AiVaultScanProgress | null }) => void = () =>
     undefined
   vi.stubGlobal('api', {
     aiVault: {
-      getScanProgress: () => Promise.resolve(null),
+      getScanProgress: () => new Promise<null>(() => undefined),
       onScanProgress: (callback: typeof push) => {
         push = callback
         return () => undefined
       }
     }
   })
-  const applied = (scanId: string): AiVaultListResult => ({
-    sessions: [],
-    issues: [],
-    scannedAt: new Date(1_000).toISOString(),
-    scanId
-  })
-  function Panel({ scanKey, result }: { scanKey: string; result: AiVaultListResult | null }) {
-    const progress = useAiVaultScanProgress('local', scanKey, result?.scanId)
+  function Panel({ scanKey }: { scanKey: string }) {
+    const progress = useAiVaultScanProgress('local', scanKey)
     return progress ? <AiVaultScanProgressStrip progress={progress} /> : null
   }
-  const a = render(<Panel scanKey="scope-a" result={applied('scan-a')} />)
-  const b = render(<Panel scanKey="scope-b" result={null} />)
-  const aView = within(a.container)
-  const bView = within(b.container)
+  const panel = render(<Panel scanKey="worktree-a" />)
+  const view = within(panel.container)
+  act(() => push({ scanKey: 'worktree-a', progress: FINISHED }))
+  expect(view.getByText('Scanned', { exact: false })).toBeTruthy()
 
-  act(() => push({ scanKey: 'scope-a', progress: FINISHED }))
-  expect(aView.getByText('Scanned', { exact: false })).toBeTruthy()
+  const next = { ...FINISHED, scanId: 'scan-a-next' }
+  act(() => push({ scanKey: 'worktree-a', progress: { ...next, stage: 'reading', settledAt: null } }))
+  expect(view.getByText('Reading', { exact: false })).toBeTruthy()
+  // Finished before the list it produced is applied: still one row, now settled.
+  act(() => push({ scanKey: 'worktree-a', progress: next }))
+  expect(view.getByText('Scanned', { exact: false })).toBeTruthy()
+
+  // A new key has nothing yet: the row keeps following the old key until it does.
+  panel.rerender(<Panel scanKey="worktree-b" />)
+  expect(view.getByText('Scanned', { exact: false })).toBeTruthy()
   act(() =>
     push({
-      scanKey: 'scope-b',
+      scanKey: 'worktree-b',
       progress: { ...FINISHED, scanId: 'scan-b', stage: 'finding', settledAt: null }
     })
   )
-  expect(bView.getByText('Scanning', { exact: false })).toBeTruthy()
-  expect(aView.getByText('Scanned', { exact: false })).toBeTruthy()
-
-  const next = { ...FINISHED, scanId: 'scan-a-next' }
-  act(() => push({ scanKey: 'scope-a', progress: { ...next, stage: 'reading', settledAt: null } }))
-  expect(aView.getByText('Reading', { exact: false })).toBeTruthy()
-  // Finished before its list is applied: the strip must not claim a total the list does not show yet.
-  act(() => push({ scanKey: 'scope-a', progress: next }))
-  expect(aView.queryByText('Scanned', { exact: false })).toBeNull()
-  a.rerender(<Panel scanKey="scope-a" result={applied(next.scanId)} />)
-  expect(aView.getByText('Scanned', { exact: false })).toBeTruthy()
+  expect(view.getByText('Scanning', { exact: false })).toBeTruthy()
 })

@@ -116,7 +116,6 @@ describe('Session History scan progress, scanner child to window', () => {
     await scan
 
     expect(published.map((progress) => progress?.stage ?? null)).toEqual([
-      null,
       'finding',
       reports[0]!.stage,
       'finished'
@@ -131,15 +130,16 @@ describe('Session History scan progress, scanner child to window', () => {
   })
 
   it('keeps a replacement entry when the scan it replaced fails late', () => {
+    const earlier = startLocalAiVaultScanProgress('scope', 'earlier', () => 500)
+    earlier.finish(null)
     const old = startLocalAiVaultScanProgress('scope', 'old', () => 1_000)
-    old.sent()
     const replacement = startLocalAiVaultScanProgress('scope', 'replacement', () => 2_000)
     old.fail()
-    replacement.sent()
     expect(localAiVaultScanProgress('scope')).toMatchObject({ stage: 'finding', startedAt: 2_000 })
 
+    // A failed refresh puts back the last finished scan rather than leaving the key empty.
     replacement.fail()
-    expect(localAiVaultScanProgress('scope')).toBeNull()
+    expect(localAiVaultScanProgress('scope')).toMatchObject({ scanId: 'earlier', stage: 'finished' })
   })
 
   it('clears the entry when an interactive timeout retires the shared scanner', async () => {
