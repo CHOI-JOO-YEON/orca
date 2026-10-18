@@ -43,6 +43,7 @@ let log: ReturnType<typeof recordingStructuredAgentSessionLogger>
 let persistHandle: ReturnType<typeof vi.fn<() => Promise<void>>>
 let childWork: string[]
 let now: number
+let initialAttach: ReturnType<typeof hostTestAttachParams>
 
 beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), 'orca-claude-stop-exit-ends-record-'))
@@ -97,13 +98,13 @@ beforeEach(async () => {
     idleSweep: { intervalMs: 3_600_000, idleMs: 0 },
     now: () => now
   })
-  const params = hostTestAttachParams(null, {
+  initialAttach = hostTestAttachParams(null, {
     provider: 'claude',
     agent: 'claude',
     accountHome: { variable: 'CLAUDE_CONFIG_DIR', path: join(root, 'claude-home') },
     providerHandle: { kind: 'claude', sessionId: PROVIDER_SESSION_ID, leafUuid: null }
   })
-  expect(await host.attach(CALLER, params)).toMatchObject({ ok: true })
+  expect(await host.attach(CALLER, initialAttach)).toMatchObject({ ok: true })
   await vi.waitFor(() => expect(host.readStatusSummary(SESSION)?.hostExecutionPhase).toBe('ready'))
   await Promise.all(lifecycle)
 })
@@ -544,27 +545,20 @@ it('retains exit ownership through kept reattach and final-tail failure recovery
     now += 30_000
     throw new Error('final journal write acknowledgement lost')
   })
-  const reserved = deferred<void>()
+  const reserved = vi.fn()
   const continueAttach = deferred<void>()
   const reserve = store.reserveOwner.bind(store)
   vi.spyOn(store, 'reserveOwner').mockImplementationOnce(async (request) => {
     const result = await reserve(request)
-    reserved.resolve()
+    reserved()
     await continueAttach.promise
     return result
   })
   const recovery = vi.spyOn(host['eventRecovery'], 'recoverAfterSinkFailure')
-  const reattaching = host.attach(
-    CALLER,
-    hostTestAttachParams(exiting.fence, {
-      provider: 'claude',
-      agent: 'claude',
-      accountHome: { variable: 'CLAUDE_CONFIG_DIR', path: join(root, 'claude-home') },
-      providerHandle: { kind: 'claude', sessionId: PROVIDER_SESSION_ID, leafUuid: null }
-    })
-  )
+  // A repeated attach replays its original operation; a new one cannot take a live lease.
+  const reattaching = host.attach(CALLER, initialAttach)
   try {
-    await reserved.promise
+    await eventually(() => expect(reserved).toHaveBeenCalledOnce())
     connection.exitVerdict = { root: 'exited', tree: 'unverifiable' }
     connection.handlers.onExit?.(new Error('claude exited'))
     await eventually(() => expect(recovery).toHaveBeenCalledOnce())
