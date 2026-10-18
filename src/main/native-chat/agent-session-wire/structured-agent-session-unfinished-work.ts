@@ -58,8 +58,7 @@ export function unfinishedStructuredAgentSessionWorkWasInterrupted(
         heldSends?.has(send.clientMessageId) &&
         send.fence === exit?.ownerFence &&
         !isQueuedAgentJournalSubmission(send) &&
-        send.dispatchState !== 'accepted' &&
-        send.dispatchState !== 'rejected'
+        (send.dispatchState === 'pending' || send.dispatchState === 'unknown')
     ) ||
     currentSnapshot.items.some(isInProgressStructuredAgentSessionItem)
   ) {

@@ -525,29 +525,56 @@ it('has the idle reaper join a close still unverifiable, ending the record with 
   expect(host.hasSession(SESSION)).toBe(false)
 })
 
-it("retains exit ownership and time when final-tail failure forces Orca's own recovery", async () => {
+it('retains exit ownership through kept reattach and final-tail failure recovery', async () => {
   const connection = claude.connections[0]!
   await openTurn(connection)
   const pending = await send('also held at exit')
   await eventually(() => expect(wrote(connection, 'also held at exit')).toBe(true))
   const exiting = child()!
+  const originalSink = host['runtimeState'].currentEventSink(SESSION)!
   const lateEvent = deferred<void>()
   const handle = host.handleAdapterEvent.bind(host)
   vi.spyOn(host, 'handleAdapterEvent').mockImplementation((event) =>
     event.type === 'ended' ? lateEvent.promise.then(() => handle(event)) : handle(event)
   )
   const journal = host['sessions'].get(SESSION)!.journal
-  const append = journal.appendSteps.bind(journal)
-  vi.spyOn(journal, 'appendSteps').mockImplementationOnce(async (steps) => {
-    await append(steps)
+  const append = journal.appendResolvedItem.bind(journal)
+  vi.spyOn(journal, 'appendResolvedItem').mockImplementationOnce(async (resolve, options) => {
+    await append(resolve, options)
     now += 30_000
     throw new Error('final journal write acknowledgement lost')
   })
-  connection.exitVerdict = { root: 'exited', tree: 'unverifiable' }
-  connection.handlers.onExit?.(new Error('claude exited'))
+  const reserved = deferred<void>()
+  const continueAttach = deferred<void>()
+  const reserve = store.reserveOwner.bind(store)
+  vi.spyOn(store, 'reserveOwner').mockImplementationOnce(async (request) => {
+    const result = await reserve(request)
+    reserved.resolve()
+    await continueAttach.promise
+    return result
+  })
+  const recovery = vi.spyOn(host['eventRecovery'], 'recoverAfterSinkFailure')
+  const reattaching = host.attach(
+    CALLER,
+    hostTestAttachParams(exiting.fence, {
+      provider: 'claude',
+      agent: 'claude',
+      accountHome: { variable: 'CLAUDE_CONFIG_DIR', path: join(root, 'claude-home') },
+      providerHandle: { kind: 'claude', sessionId: PROVIDER_SESSION_ID, leafUuid: null }
+    })
+  )
   try {
+    await reserved.promise
+    connection.exitVerdict = { root: 'exited', tree: 'unverifiable' }
+    connection.handlers.onExit?.(new Error('claude exited'))
+    await eventually(() => expect(recovery).toHaveBeenCalledOnce())
+    expect(originalSink.state().failed).toBe(true)
+    expect(adapter.heldSends(SESSION)?.size).toBe(0)
+    continueAttach.resolve()
+    await expect(reattaching).resolves.toMatchObject({ ok: true })
     await eventually(() => expect(child()).toBeNull())
   } finally {
+    continueAttach.resolve()
     lateEvent.resolve()
   }
   expect(host['sessions'].get(SESSION)?.lastEndedChild).toMatchObject({
@@ -556,7 +583,8 @@ it("retains exit ownership and time when final-tail failure forces Orca's own re
   })
   expect(exiting.exitObservation?.()).toMatchObject({ observedAt: NOW })
   expect(exiting.exitObservation?.().heldSends).toContain(pending)
-  expect(adapter.heldSends(SESSION)?.size).toBe(0)
+  expect(exiting.exitObservation).toBe(originalSink.exitObservation)
+  expect(claude.connections).toHaveLength(1)
   const snapshot = await host.journalSnapshot(SESSION)
   expect(snapshot.items).toContainEqual(
     expect.objectContaining({

@@ -247,7 +247,7 @@ async function runAttachUnderAbort(
         )
         attempt.candidate = {
           sink: eventSink,
-          child: {
+          child: (owner === 'kept' && current) || {
             generation: acquisitionGeneration ?? current?.generation ?? null,
             fence,
             // An acquire reports its phase; a re-attach keeps what its child already proved.
