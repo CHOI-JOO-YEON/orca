@@ -306,16 +306,13 @@ export async function acquireAcpStructuredSession(input: {
       exitObservedAt: null
     }
     const reading = liveLane
-    const unbind = events?.bindReadingControl?.({
+    session.unbindReadingControl = events?.bindReadingControl?.({
       pauseReading: () => connection.pauseReading(),
       resumeReading: () => {
         connection.resumeReading()
         reading.retry()
       }
     })
-    if (unbind) {
-      session.unbindReadingControl = unbind
-    }
     if (connection.exited || connection.closed) {
       throw new Error(connection.stderrTail() || `${spec.command} exited while starting`)
     }

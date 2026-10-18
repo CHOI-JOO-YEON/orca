@@ -86,7 +86,6 @@ export type StructuredAgentSessionRevisionResolver = (
 export type StructuredAgentSessionRevisionOptions = StructuredAgentSessionItemAppendOptions
 
 export type StructuredAgentSessionEventSink = StructuredAgentSessionTransitionSink & {
-  /** Teardown evidence survives the failed queue; recording it never writes or publishes. */
   observeExit?: StructuredAgentSessionExitObservation['record']
   appendItem(
     identity: AgentJournalItemIdentity,
