@@ -307,9 +307,10 @@ export function NativeChatComposerField({
                 compositionBaseRef.current = textareaRef.current!.value
                 imeEnterGesture.setComposing(true)
               }}
-              onCompositionEnd={() => {
+              onCompositionEnd={(event) => {
                 const compositionWasActive = imeEnterGesture.isComposing()
-                imeEnterGesture.setComposing(false)
+                // The Enter that commits Hangul is the send, not a candidate confirm (#30159).
+                imeEnterGesture.setComposing(false, event.data)
                 if (compositionWasActive) {
                   settleImeValue(textareaRef.current!)
                 }

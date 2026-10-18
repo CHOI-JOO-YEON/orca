@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { renderHook } from '@testing-library/react'
 import type { KeyboardEvent as ReactKeyboardEvent } from 'react'
 import {
+  isHangulCompositionCommit,
   isImeCompositionKeyDown,
   isImeOwnedKeyboardEvent,
   useImeEnterGestureOwnership
@@ -217,4 +218,46 @@ describe('useImeEnterGestureOwnership', () => {
     expect(result.current.ownsKeyDown(redispatch)).toBe(true)
     expect(redispatch.prevented).toBe(true)
   })
+
+  // Regression (#30159): Hangul has no candidate step, so the Enter that commits it is a submit.
+  it('lets the redispatched Enter through after a Hangul commit', () => {
+    const { result } = renderHook(() => useImeEnterGestureOwnership())
+    result.current.setComposing(true)
+    expect(
+      result.current.ownsKeyDown(gestureEvent({ key: 'Process', keyCode: 229, isComposing: true }))
+    ).toBe(true)
+
+    result.current.setComposing(false, '요')
+    const redispatch = gestureEvent({ key: 'Enter', keyCode: 13 })
+    expect(result.current.ownsKeyDown(redispatch)).toBe(false)
+    expect(redispatch.prevented).toBe(false)
+  })
+
+  it.each([['日本語'], ['漢字'], [''], [undefined]])(
+    'still swallows the redispatched Enter after committing %j',
+    (committedText) => {
+      const { result } = renderHook(() => useImeEnterGestureOwnership())
+      result.current.setComposing(true)
+      result.current.ownsKeyDown(gestureEvent({ key: 'Process', keyCode: 229, isComposing: true }))
+
+      result.current.setComposing(false, committedText)
+      const redispatch = gestureEvent({ key: 'Enter', keyCode: 13 })
+      expect(result.current.ownsKeyDown(redispatch)).toBe(true)
+      expect(redispatch.prevented).toBe(true)
+    }
+  )
+})
+
+describe('isHangulCompositionCommit', () => {
+  it.each(['가', '안녕하세요', 'ㄱ', 'ㅏ'])('treats %j as a Hangul commit', (text) => {
+    expect(isHangulCompositionCommit(text)).toBe(true)
+  })
+
+  // Hanja from the Korean IME's conversion key is a candidate pick, like kanji or hanzi.
+  it.each(['日本語', 'にほんご', '漢字', '中文', '', 'a', '가a'])(
+    'does not treat %j as a Hangul commit',
+    (text) => {
+      expect(isHangulCompositionCommit(text)).toBe(false)
+    }
+  )
 })

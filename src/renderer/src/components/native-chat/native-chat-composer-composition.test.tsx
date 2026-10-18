@@ -1,4 +1,4 @@
-import { changePrompt, promptValue } from './native-chat-prompt-editor.test-support'
+import { changePrompt, endComposition, promptValue } from './native-chat-prompt-editor.test-support'
 // @vitest-environment happy-dom
 
 import { createRef } from 'react'
@@ -151,27 +151,87 @@ describe('native chat composer composition ownership', () => {
     expect(settledValue).toBe('')
   })
 
-  it('uses the shared Enter gesture owner without swallowing the next deliberate Enter', () => {
-    const onKeyDown = vi.fn()
-    render(<TestField {...fieldProps({ draft: '가', onKeyDown })} />)
-    const input = textarea()
+  // Windows/Linux redispatch the unmarked Enter before keyup; macOS releases the key first.
+  const confirmOrderings = [
+    { platform: 'Windows', keyUpBeforeRedispatch: false },
+    { platform: 'macOS', keyUpBeforeRedispatch: true }
+  ]
+
+  function confirmCompositionWithEnter(
+    input: HTMLElement,
+    { composed, committed }: { composed: string; committed: string },
+    keyUpBeforeRedispatch: boolean
+  ): boolean {
     fireEvent.compositionStart(input)
-
+    changePrompt(input, composed)
     fireEvent.keyDown(input, { key: 'Process', keyCode: 229, isComposing: true })
-    fireEvent.compositionEnd(input, { data: '가' })
-    const redispatch = fireEvent.keyDown(input, {
-      key: 'Enter',
-      keyCode: 13,
-      isComposing: false
-    })
+    endComposition(input, committed)
+    if (keyUpBeforeRedispatch) {
+      fireEvent.keyUp(input, { key: 'Enter', keyCode: 13 })
+    }
+    const redispatch = fireEvent.keyDown(input, { key: 'Enter', keyCode: 13, isComposing: false })
+    if (!keyUpBeforeRedispatch) {
+      fireEvent.keyUp(input, { key: 'Enter', keyCode: 13 })
+    }
+    return redispatch
+  }
 
-    expect(redispatch).toBe(false)
-    expect(onKeyDown).not.toHaveBeenCalled()
+  // Regression (#30159): Hangul has no candidate step, so its committing Enter is the send.
+  it.each(confirmOrderings)(
+    'hands the Enter that commits Hangul to the composer once, after settling ($platform)',
+    ({ keyUpBeforeRedispatch }) => {
+      const calls: string[] = []
+      // Like the real send, which owns the Enter instead of letting the editor split the line.
+      const onKeyDown = vi.fn((event: { preventDefault: () => void }) => {
+        event.preventDefault()
+        calls.push('keydown')
+      })
+      const onImeSettled = vi.fn((element: { value: string }) => calls.push(element.value))
+      // Holds the carry's frame open so only the Hangul commit can release it.
+      const raf = vi.spyOn(window, 'requestAnimationFrame').mockImplementation(() => 1)
+      try {
+        render(<TestField {...fieldProps({ onKeyDown, onImeSettled })} />)
+        const input = textarea()
 
-    fireEvent.keyUp(input, { key: 'Enter', keyCode: 13 })
-    fireEvent.keyDown(input, { key: 'Enter', keyCode: 13, isComposing: false })
-    expect(onKeyDown).toHaveBeenCalledOnce()
-  })
+        confirmCompositionWithEnter(
+          input,
+          { composed: '안녕하세요', committed: '요' },
+          keyUpBeforeRedispatch
+        )
+
+        expect(calls).toEqual(['안녕하세요', 'keydown'])
+        expect(promptValue(input)).toBe('안녕하세요')
+      } finally {
+        raf.mockRestore()
+      }
+    }
+  )
+
+  it.each(confirmOrderings)(
+    'swallows the Enter that confirms a Japanese candidate without eating the next one ($platform)',
+    ({ keyUpBeforeRedispatch }) => {
+      const onKeyDown = vi.fn()
+      const raf = vi.spyOn(window, 'requestAnimationFrame').mockImplementation(() => 1)
+      try {
+        render(<TestField {...fieldProps({ onKeyDown })} />)
+        const input = textarea()
+
+        const redispatch = confirmCompositionWithEnter(
+          input,
+          { composed: '日本語', committed: '日本語' },
+          keyUpBeforeRedispatch
+        )
+
+        expect(redispatch).toBe(false)
+        expect(onKeyDown).not.toHaveBeenCalled()
+
+        fireEvent.keyDown(input, { key: 'Enter', keyCode: 13, isComposing: false })
+        expect(onKeyDown).toHaveBeenCalledOnce()
+      } finally {
+        raf.mockRestore()
+      }
+    }
+  )
 
   it('releases composition ownership on blur even when compositionend is omitted', () => {
     const onImeSettled = vi.fn()
