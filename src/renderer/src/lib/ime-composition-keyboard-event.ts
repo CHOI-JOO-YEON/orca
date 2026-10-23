@@ -24,12 +24,8 @@ type ImeEnterGestureEvent = Pick<
   'key' | 'keyCode' | 'nativeEvent' | 'preventDefault' | 'shiftKey'
 > & { altKey?: boolean; ctrlKey?: boolean; metaKey?: boolean }
 
+// Hangul has no candidate step, so the Enter that commits it is the user's own Enter.
 const HANGUL_ONLY = /^\p{Script=Hangul}+$/u
-
-/** Hangul has no candidate step, so the Enter that commits it is the user's own Enter. */
-export function isHangulCompositionCommit(committedText: string): boolean {
-  return HANGUL_ONLY.test(committedText)
-}
 
 /**
  * Why: the confirming Enter of a CJK composition arrives as two keydowns, and the
@@ -124,9 +120,9 @@ export function useImeEnterGestureOwnership(): {
         }
       },
       reset,
-      setComposing: (active: boolean, committedText?: string) => {
+      setComposing: (active: boolean, committedText = '') => {
         stateRef.current.composing = active
-        if (!active && committedText !== undefined && isHangulCompositionCommit(committedText)) {
+        if (!active && HANGUL_ONLY.test(committedText)) {
           stateRef.current.pendingEnter = null
         }
       }

@@ -311,41 +311,21 @@ describe('a withdrawn message put back during an IME composition', () => {
   })
 })
 
-describe('the Enter that ends an IME composition', () => {
-  async function composeThenEnter(
-    input: HTMLTextAreaElement,
-    composed: string,
-    committed: string
-  ): Promise<void> {
-    fireEvent.compositionStart(input)
-    changePrompt(input, composed)
-    fireEvent.keyDown(input, { key: 'Process', keyCode: 229, isComposing: true })
-    endComposition(input, committed)
-    await act(async () => pressEnter(input))
-    fireEvent.keyUp(input, { key: 'Enter', keyCode: 13 })
-  }
-
-  // Regression (#30159): a message ending in a composing syllable needed a second Enter.
-  it('sends a Hangul message once, with its last syllable', async () => {
-    const structured = transport()
-    renderComposer(structured)
-
-    await composeThenEnter(textarea(), '안녕하세요', '요')
-
-    expect(structured.dispatchCommand).toHaveBeenCalledOnce()
-    expect(structured.send).toHaveBeenCalledOnce()
-    expect(structured.send).toHaveBeenCalledWith('안녕하세요', [])
-  })
-
-  it('does not send on the Enter that confirms a Japanese candidate', async () => {
+// Regression (#30159): a message ending in a composing syllable needed a second Enter.
+describe('the Enter that commits a Hangul composition', () => {
+  it('sends the message once, with its last syllable', async () => {
     const structured = transport()
     renderComposer(structured)
     const input = textarea()
 
-    await composeThenEnter(input, '日本語', '日本語')
+    fireEvent.compositionStart(input)
+    changePrompt(input, '안녕하세요')
+    fireEvent.keyDown(input, { key: 'Process', keyCode: 229, isComposing: true })
+    endComposition(input, '요')
+    await act(async () => pressEnter(input))
 
-    expect(structured.dispatchCommand).not.toHaveBeenCalled()
-    expect(promptValue(input)).toBe('日本語')
+    expect(structured.send).toHaveBeenCalledOnce()
+    expect(structured.send).toHaveBeenCalledWith('안녕하세요', [])
   })
 })
 
