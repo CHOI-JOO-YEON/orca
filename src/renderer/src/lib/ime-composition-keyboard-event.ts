@@ -41,7 +41,6 @@ export function useImeEnterGestureOwnership(): {
   onKeyUp: (event: ImeEnterGestureEvent) => void
   onCompositionEnd: () => void
   reset: () => void
-  /** Passing what an ending composition committed lets a Hangul commit's Enter through. */
   setComposing: (active: boolean, committedText?: string) => void
 } {
   const stateRef = useRef<{ composing: boolean; pendingEnter: object | null }>({
